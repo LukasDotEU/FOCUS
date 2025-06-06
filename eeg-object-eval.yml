@@ -1,0 +1,20 @@
+name: eeg-object-eval
+channels:
+  - defaults
+dependencies:
+  - python=3.13
+  - pip
+
+  - pip:
+      # so PyTorch installs CUDA 12.8 wheels
+      - --extra-index-url https://download.pytorch.org/whl/cu128
+
+      # core ML stack
+      - torch==2.7
+      - torchvision==0.22
+      - torchaudio==2.7
+
+      - einops
+      - torch_geometric
+      - pandas
+      - scikit-learn
