@@ -59,7 +59,7 @@ class EEGNet(BaseModel):
         model(x)
 
     Args:
-        chunk_size (int): Number of data points included in each EEG chunk, i.e., :math:`T` in the paper. (default: :obj:`151`)
+        time_steps (int): formerly chunk_size. Number of data points included in each EEG chunk, i.e., :math:`T` in the paper. (default: :obj:`151`)
         num_electrodes (int): The number of electrodes, i.e., :math:`C` in the paper. (default: :obj:`60`)
         F1 (int): The filter number of block 1, i.e., :math:`F_1` in the paper. (default: :obj:`8`)
         F2 (int): The filter number of block 2, i.e., :math:`F_2` in the paper. (default: :obj:`16`)
@@ -73,7 +73,7 @@ class EEGNet(BaseModel):
         super().__init__(num_classes, device=device, **kwargs)
 
     def build_model(self,
-                    chunk_size: int = 151,
+                    time_steps: int = 151,
                     num_electrodes: int = 64,
                     F1: int = 8,
                     F2: int = 16,
@@ -84,7 +84,7 @@ class EEGNet(BaseModel):
                     dropout: float = 0.25,
                     learning_rate: float = 1e-3):
         # Save hyperparameters.
-        self.chunk_size = chunk_size
+        self.chunk_size = time_steps
         self.num_electrodes = num_electrodes
         self.F1 = F1
         self.F2 = F2
