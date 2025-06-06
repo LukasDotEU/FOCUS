@@ -177,6 +177,6 @@ class EEGNet(BaseModel):
         labels = batch['class_idx']
         subjects = list(batch['subject'])
         logits = self.forward(batch)
-        scores = F.softmax(logits, dim=1)
+        scores = torch.softmax(logits, dim=1)
         preds = torch.argmax(scores, dim=1)
         return preds, labels, scores, None, subjects
