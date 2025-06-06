@@ -28,7 +28,9 @@ MODEL_CONFIGS = [
             'kernel_2': 16,
             'dropout': 0.25,
             'learning_rate': 1e-3
-        }
+        },
+        'pretrained': False,       # Whether to use pre-training
+        'use_images': True        # Whether the model needs images during training
     },
     # Add more model configurations here...
 ]

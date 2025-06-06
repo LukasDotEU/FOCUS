@@ -46,7 +46,11 @@ def train_and_evaluate(dataset_conf, model_conf):
 
     # 1) Instantiate the full dataset
     DSClass = dataset_conf['class']
-    full_dataset = DSClass(eeg_root=dataset_conf['eeg_root'], images_root=dataset_conf['images_root'])
+    full_dataset = DSClass(
+        eeg_root=dataset_conf['eeg_root'],
+        images_root=dataset_conf['images_root'],
+        use_images=model_conf['use_images']  # Forward use_images to the dataset.
+    )
 
     # Build outer splits
     splitter = SplitGenerator(full_dataset.metadata)

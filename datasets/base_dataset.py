@@ -1,5 +1,6 @@
 import pandas as pd
 from torch.utils.data import Dataset
+from torchvision import transforms
 
 class BaseEEGDataset(Dataset):
     """
@@ -20,12 +21,24 @@ class BaseEEGDataset(Dataset):
            'image'    : torch.Tensor or None (if images not used)
     """
 
-    def __init__(self, eeg_root: str, images_root: str, use_images: bool, preload_images: bool):
+    def __init__(self, eeg_root: str, images_root: str, use_images: bool, preload_images: bool, image_transform: transforms):
         super().__init__()
         self.eeg_root = eeg_root
         self.images_root = images_root
         self.use_images = use_images
         self.preload_images = preload_images
+
+        # Set up image transform (if none provided, use a default CLIP‐style pipeline)
+        if image_transform is None:
+            self.image_transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ])
+        else:
+            self.image_transform = image_transform
+
         # Subclasses must create a DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx']
         self.metadata = pd.DataFrame(columns=['idx', 'subject', 'class_idx', 'image_idx'])
 
