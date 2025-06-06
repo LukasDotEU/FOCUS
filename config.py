@@ -33,7 +33,9 @@ MODEL_CONFIGS = [
             'learning_rate': 1e-3
         },
         'pretraining': False,
-        'use_images': False
+        'use_images': False,
+        'epochs': 100,
+        'batch_size': 64
     },
     {
         'name': 'EEGChannelNet',
@@ -55,7 +57,9 @@ MODEL_CONFIGS = [
             'learning_rate': 1e-3
         },
         'pretraining': False,
-        'use_images': False
+        'use_images': False,
+        'epochs': 100,
+        'batch_size': 16
     },
     # Add more model configurations here...
 ]
@@ -65,7 +69,7 @@ MODEL_CONFIGS = [
 SELECTED_CONFIGS = [
     {
         'dataset': 'EEGImageNet',
-        'model': 'EEGChannelNet'
+        'model': 'EEGNet'
     },
     # Add more combinations as desired...
 ]

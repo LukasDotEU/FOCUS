@@ -18,8 +18,6 @@ from utils.splitGenerator import SplitGenerator
 # Import configuration.
 from config import DATASET_CONFIGS, MODEL_CONFIGS, SELECTED_CONFIGS
 
-EPOCHS = 50
-BATCH_SIZE = 64
 NUM_WORKERS = 4
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -61,6 +59,10 @@ def train_and_evaluate(dataset_conf, model_conf):
     # Tag each split with a `split_type` for later grouping
     all_outer_splits = per_subj_splits + all_subj_cv_splits + cross_subj_splits
 
+    # Retrieve training parameters from model_conf.
+    epochs = model_conf['epochs']
+    batch_size = model_conf['batch_size']
+
     # 3) Loop through each outer split, carve out a single <train/val> and then do final test
     for split in all_outer_splits:
         split_name = split['name']
@@ -74,23 +76,22 @@ def train_and_evaluate(dataset_conf, model_conf):
         # 2a) carve out inner (train_inner_idx, val_idx) according to split_type via the class method:
         train_inner_idx, val_idx = splitter.get_inner_split(outer_train_idx, split_name)
 
-
-        # Build DataLoaders
+        # Build DataLoaders with batch_size from model_conf.
         train_loader = DataLoader(
             Subset(full_dataset, train_inner_idx),
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             shuffle=True,
             num_workers=NUM_WORKERS
         )
         val_loader = DataLoader(
             Subset(full_dataset, val_idx),
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             shuffle=False,
             num_workers=NUM_WORKERS
         )
         test_loader = DataLoader(
             Subset(full_dataset, outer_test_idx),
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             shuffle=False,
             num_workers=NUM_WORKERS
         )
@@ -109,7 +110,7 @@ def train_and_evaluate(dataset_conf, model_conf):
         best_state = None
 
         # Training loop.
-        for epoch in range(EPOCHS):
+        for epoch in range(epochs):
             with Timer() as t_train:
                 avg_loss = model.train_one_epoch(train_loader)
             train_time = t_train.elapsed
