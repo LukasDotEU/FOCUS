@@ -1,4 +1,3 @@
-```markdown
 # EEG Object Evaluation
 
 This repository implements several methods for evaluating EEG signals in combination with visual stimuli. The project provides a common interface for building and testing deep neural network models on EEG datasets, with optional integration of associated images.
