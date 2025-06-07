@@ -15,44 +15,12 @@ from utils.metrics import Evaluator
 from utils.timers import Timer
 from utils.splitGenerator import SplitGenerator
 
-# --------------------------------------
-# Configuration (you can also load from a YAML/JSON)
-DATASET_CONFIGS = [
-    {
-        'name': 'EEGImageNet',
-        'class': EEGImageNet,
-        'eeg_root': '../Datasets/EEGImageNet/eeg_55_95_std.pth',
-        'images_root': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/',
-    },
-    # Add more datasets here...
-]
+# Import configuration.
+from config import DATASET_CONFIGS, MODEL_CONFIGS, SELECTED_CONFIGS
 
-MODEL_CONFIGS = [
-    {
-        'name': 'EEGNet',
-        'class': EEGNet,
-        'args': {
-            'chunk_size': 440,
-            'num_electrodes': 128,
-            'F1': 8,
-            'F2': 16,
-            'D': 2,
-            'num_classes': 40,
-            'kernel_1': 64,
-            'kernel_2': 16,
-            'dropout': 0.25,
-            'learning_rate': 1e-3
-        }
-    },
-    # Add more model configs here...
-]
-
-EPOCHS = 50
-BATCH_SIZE = 64
 NUM_WORKERS = 4
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# --------------------------------------
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
@@ -76,7 +44,11 @@ def train_and_evaluate(dataset_conf, model_conf):
 
     # 1) Instantiate the full dataset
     DSClass = dataset_conf['class']
-    full_dataset = DSClass(eeg_root=dataset_conf['eeg_root'], images_root=dataset_conf['images_root'])
+    full_dataset = DSClass(
+        eeg_root=dataset_conf['eeg_root'],
+        images_root=dataset_conf['images_root'],
+        use_images=model_conf['use_images']  # Forward use_images to the dataset.
+    )
 
     # Build outer splits
     splitter = SplitGenerator(full_dataset.metadata)
@@ -86,6 +58,10 @@ def train_and_evaluate(dataset_conf, model_conf):
 
     # Tag each split with a `split_type` for later grouping
     all_outer_splits = per_subj_splits + all_subj_cv_splits + cross_subj_splits
+
+    # Retrieve training parameters from model_conf.
+    epochs = model_conf['epochs']
+    batch_size = model_conf['batch_size']
 
     # 3) Loop through each outer split, carve out a single <train/val> and then do final test
     for split in all_outer_splits:
@@ -100,23 +76,22 @@ def train_and_evaluate(dataset_conf, model_conf):
         # 2a) carve out inner (train_inner_idx, val_idx) according to split_type via the class method:
         train_inner_idx, val_idx = splitter.get_inner_split(outer_train_idx, split_name)
 
-
-        # Build DataLoaders
+        # Build DataLoaders with batch_size from model_conf.
         train_loader = DataLoader(
             Subset(full_dataset, train_inner_idx),
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             shuffle=True,
             num_workers=NUM_WORKERS
         )
         val_loader = DataLoader(
             Subset(full_dataset, val_idx),
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             shuffle=False,
             num_workers=NUM_WORKERS
         )
         test_loader = DataLoader(
             Subset(full_dataset, outer_test_idx),
-            batch_size=BATCH_SIZE,
+            batch_size=batch_size,
             shuffle=False,
             num_workers=NUM_WORKERS
         )
@@ -124,11 +99,9 @@ def train_and_evaluate(dataset_conf, model_conf):
         # 2b) Instantiate fresh model
         ModelClass = model_conf['class']
         model_args = model_conf['args'].copy()
-
         model = ModelClass(**model_args).to(DEVICE)
         total_params, trainable_params = model.count_params()
-        print(f"[{split_name}] Initialized model '{model_conf['name']}' "
-                    f"→ total_params={total_params}, trainable_params={trainable_params}")
+        print(f"[{split_name}] Initialized model '{model_conf['name']}' → total_params={total_params}, trainable_params={trainable_params}")
 
         # 2c) Training loop (track best-F1 on validation)
         evaluator = Evaluator(average='macro')
@@ -136,8 +109,8 @@ def train_and_evaluate(dataset_conf, model_conf):
         best_epoch = -1
         best_state = None
 
-        for epoch in range(EPOCHS):
-            print(f"[{split_name}] Epoch {epoch+1}/{EPOCHS} - Training on {len(train_inner_idx)} samples")
+        # Training loop.
+        for epoch in range(epochs):
             with Timer() as t_train:
                 avg_loss = model.train_one_epoch(train_loader)
             train_time = t_train.elapsed
@@ -148,7 +121,7 @@ def train_and_evaluate(dataset_conf, model_conf):
                 best_val_score = current_f1
                 best_epoch = epoch
                 best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-            
+
             print(
                 f"[{split_name}] Epoch {epoch+1} → Loss={avg_loss:.4f}, "
                 f"Val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})"
@@ -213,10 +186,22 @@ def train_and_evaluate(dataset_conf, model_conf):
 
 if __name__ == "__main__":
     all_results = []
-    for ds_conf in DATASET_CONFIGS:
-        for m_conf in MODEL_CONFIGS:
-            res = train_and_evaluate(ds_conf, m_conf)
-            all_results.extend(res)
+    # Iterate over selected configuration combinations.
+    for combo in SELECTED_CONFIGS:
+        ds_name = combo['dataset']
+        model_name = combo['model']
+
+        # Retrieve dataset configuration.
+        ds_conf = next(item for item in DATASET_CONFIGS if item['name'] == ds_name)
+        # Retrieve model configuration.
+        m_conf = next(item for item in MODEL_CONFIGS if item['name'] == model_name)
+
+        m_conf['args']['time_steps'] = ds_conf['time_steps']
+        m_conf['args']['num_electrodes'] = ds_conf['num_electrodes']
+        m_conf['args']['num_classes'] = ds_conf['num_classes']
+
+        res = train_and_evaluate(ds_conf, m_conf)
+        all_results.extend(res)
 
     df_results = pd.DataFrame(all_results)
     out_csv = "evaluation_summary.csv"

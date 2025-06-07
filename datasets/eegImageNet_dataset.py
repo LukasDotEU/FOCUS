@@ -2,14 +2,12 @@ import os
 import pandas as pd
 import torch
 from PIL import Image
-from torchvision import transforms
 
 from .base_dataset import BaseEEGDataset
 
 class EEGImageNet(BaseEEGDataset):
     def __init__(self, eeg_root, images_root,
-                 use_images=False, preload_images=False, use_image_transform=False,
-                 image_transform=None):
+                 use_images=False, preload_images=True, image_transform=None):
         """
         pth_file: path to the .pth containing:
           {
@@ -37,7 +35,9 @@ class EEGImageNet(BaseEEGDataset):
         preload_images: if True, load all images into memory at init
         image_transform: torchvision transforms to apply to PIL images
         """
-        super().__init__(eeg_root=eeg_root, images_root=images_root, use_images=use_images, preload_images=preload_images)
+        super().__init__(eeg_root=eeg_root, images_root=images_root, 
+                         use_images=use_images, preload_images=preload_images, 
+                         image_transform=image_transform)
 
         # 1) Load the .pth file
         data:dict = torch.load(self.eeg_root)
@@ -60,24 +60,11 @@ class EEGImageNet(BaseEEGDataset):
             })
         self.metadata = pd.DataFrame(records)
 
-        # 3) Set up image transform (if none provided, use a default CLIP‐style pipeline)
-        if use_image_transform and image_transform is None:
-            self.image_transform = transforms.Compose([
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225]),
-            ])
-        elif use_image_transform:
-            self.image_transform = image_transform
-        else:
-            self.image_transform = None
-
-        # 4) If use_images & preload_images, build an in-memory cache of all unique images
+        # 3) If use_images & preload_images, build an in-memory cache of all unique images
         self._image_cache = {}
         if self.use_images and self.preload_images:
-            for idx, class_label, image_label in zip(self.metadata['idx'], self.class_labels[self.metadata['class_idx']], self.image_labels[self.metadata['image_idx']]):
-                self._image_cache[idx] = self._load_image(class_label, image_label)
+            for idx, class_idx, image_idx in zip(self.metadata['idx'], self.metadata['class_idx'], self.metadata['image_idx']):
+                self._image_cache[idx] = self._load_image(self.class_labels[class_idx], self.image_labels[image_idx])
 
     def __len__(self):
         return len(self.metadata)
@@ -133,7 +120,4 @@ class EEGImageNet(BaseEEGDataset):
         img_path = os.path.join(self.images_root, class_label, filename)
 
         with Image.open(img_path).convert('RGB') as img:
-            if self.image_transform is None:
-                return img
-            else:
-                return self.image_transform(img)
+            return self.image_transform(img)
