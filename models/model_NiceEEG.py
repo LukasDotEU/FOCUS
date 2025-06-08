@@ -1,0 +1,188 @@
+# Model taken and adpated from: https://github.com/eeyhsong/NICE-EEG
+
+import os
+import numpy as np
+
+import torch
+import torch.nn as nn
+import torch.nn.init as init
+from torch import Tensor
+
+from einops.layers.torch import Rearrange
+from transformers import CLIPModel
+
+from models.model_base import BaseModel
+
+def weights_init_normal(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('Linear') != -1:
+        init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        init.normal_(m.weight.data, 1.0, 0.02)
+        init.constant_(m.bias.data, 0.0)
+
+class PatchEmbedding(nn.Module):
+    def __init__(self, k=40, m1=25, m2=51, s=5, ch=63):
+        super().__init__()
+        # revised from shallownet
+        self.tsconv = nn.Sequential(
+            nn.Conv2d(1, k, (1, m1), (1, 1)),
+            nn.AvgPool2d((1, m2), (1, s)),
+            nn.BatchNorm2d(k),
+            nn.ELU(),
+            nn.Conv2d(k, k, (ch, 1), (1, 1)),
+            nn.BatchNorm2d(k),
+            nn.ELU(),
+            nn.Dropout(0.5),
+        )
+
+        self.projection = nn.Sequential(
+            nn.Conv2d(k, k, (1, 1), stride=(1, 1)),  
+            Rearrange('b e (h) (w) -> b (h w) e'),
+        )
+
+    def forward(self, x: Tensor) -> Tensor:
+        # b, _, _, _ = x.shape
+        x = self.tsconv(x)
+        x = self.projection(x)
+        return x
+
+class ResidualAdd(nn.Module):
+    def __init__(self, fn):
+        super().__init__()
+        self.fn = fn
+
+    def forward(self, x, **kwargs):
+        res = x
+        x = self.fn(x, **kwargs)
+        x += res
+        return x
+
+class FlattenHead(nn.Sequential):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        x = x.contiguous().view(x.size(0), -1)
+        return x
+        
+class NiceEEG(BaseModel):
+    def __init__(self, num_classes, device='cuda', **kwargs):
+        super().__init__(num_classes, device=device, **kwargs)
+    
+    def build_model(self, time_steps: int, num_electrodes: int, img_embedding_dim: int = 768, 
+                    proj_dim: int = 768, k: int = 40, m1:int = 25, m2:int = 51, s:int = 5,
+                    lr: int = 2e-4, b1: float = 0.5, b2: float = 0.999):
+        self.time_steps = time_steps
+        self.num_electrodes = num_electrodes
+
+        self.Enc_img = CLIPModel.from_pretrained("openai/clip-vit-large-patch14", cache_dir=".cache")
+        # disable grad on every CLIP parameter:
+        for p in self.Enc_img.parameters():
+            p.requires_grad = False
+
+        self.Proj_img = nn.Sequential(
+            nn.Linear(img_embedding_dim, proj_dim),
+            ResidualAdd(nn.Sequential(
+                nn.GELU(),
+                nn.Linear(proj_dim, proj_dim),
+                nn.Dropout(0.3),)),
+            nn.LayerNorm(proj_dim),
+        ).apply(weights_init_normal)
+
+        self.Enc_eeg = nn.Sequential(
+            PatchEmbedding(k=k, m1=m1, m2=m2, s=s, ch=self.num_electrodes),
+            FlattenHead()
+        ).apply(weights_init_normal)
+
+        # calculate the embedding dimension of EEG after EEG encoder
+        # k: number of filters, m1: kernel size, m2: pooling size, s: stride
+        eeg_embedding_dim = int(k * ((self.time_steps - m1 - m2 + 1)/s + 1))
+        self.Proj_eeg = nn.Sequential(
+            nn.Linear(eeg_embedding_dim, proj_dim),
+            ResidualAdd(nn.Sequential(
+                nn.GELU(),
+                nn.Linear(proj_dim, proj_dim),
+                nn.Dropout(0.5),)),
+            nn.LayerNorm(proj_dim),
+        ).apply(weights_init_normal)
+
+        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+
+        self.loss_fn = torch.nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(
+            filter(lambda p: p.requires_grad, self.parameters()),
+            lr=lr, betas=(b1, b2)
+        )
+
+        project_dir ='../Datasets/EEGImageNet/OnlyUsedImageNet40Images'
+        load_dir = os.path.join(project_dir, 'clip_center_features.npy')
+        feature_center_names = np.load(load_dir, allow_pickle=True).item()
+        self.feature_centers = torch.from_numpy(feature_center_names['clip_center_features']).to(self.device)
+
+    def forward(self, batch):
+        # TODO: check if right format...
+        eeg = batch['eeg'].unsqueeze(1)  # [B, 1, C, T]
+        img_features = batch['image']    # [B, 3, H, W]
+        
+        eeg_features = self.Enc_eeg(eeg)
+        eeg_features = self.Proj_eeg(eeg_features)
+        eeg_features = eeg_features / eeg_features.norm(dim=1, keepdim=True)
+
+        # img_features = self.Enc_img(img).last_hidden_state[:,0,:]
+        # ensure encoder is in eval (dropout off, batchnorm stats frozen)
+        self.Enc_img.eval()
+        with torch.no_grad():
+            img_features = self.Enc_img.get_image_features(img_features)
+        img_features = self.Proj_img(img_features)
+        img_features = img_features / img_features.norm(dim=1, keepdim=True)
+
+        # cosine similarity as the logits
+        logit_scale = self.logit_scale.exp()
+        logits_per_eeg = logit_scale * eeg_features @ img_features.t()
+        logits_per_img = logits_per_eeg.t()
+
+        return [logits_per_eeg, logits_per_img]
+    
+    def compute_loss(self, batch, logits):
+        logits_per_eeg, logits_per_img = logits
+        labels = torch.arange(batch['eeg'].shape[0]).to(self.device)  # used for the loss
+
+        loss_eeg = self.loss_fn(logits_per_eeg, labels)
+        loss_img = self.loss_fn(logits_per_img, labels)
+        loss_cos = (loss_eeg + loss_img) / 2
+        return loss_cos
+    
+    # TODO: make sure that order of all_center is THE SAME as the order of labels
+    def predict(self, batch):
+        subjects = list(batch['subject'])
+        labels = batch['class_idx']
+        eeg = batch['eeg'].unsqueeze(1)  # [B, 1, C, T]
+
+        eeg_features = self.Proj_eeg(self.Enc_eeg(eeg))
+        eeg_features = eeg_features / eeg_features.norm(dim=1, keepdim=True)
+        scores = (100.0 * eeg_features @ self.feature_centers.t()).softmax(dim=-1)  # no use 100?
+        preds = torch.argmax(scores, dim=1)
+        return preds, labels, scores, None, subjects
+
+
+        
+# Image2EEG
+class IE():
+    def __init__(self):
+        super(IE, self).__init__()
+
+    def get_eeg_data(self):
+        test_label = np.arange(200)
+        train_data = np.mean(train_data, axis=1)
+        train_data = np.expand_dims(train_data, axis=1)
+        test_data = np.mean(test_data, axis=1)
+        test_data = np.expand_dims(test_data, axis=1)
+
+    def train(self):
+
+        train_eeg, _, test_eeg, test_label = self.get_eeg_data()
+        train_img_feature = self.get_image_data() 
+        test_center = np.load('./dnn_feature/center_clip.npy', allow_pickle=True)

@@ -18,3 +18,4 @@ dependencies:
       - torch_geometric
       - pandas
       - scikit-learn
+      - transformers
