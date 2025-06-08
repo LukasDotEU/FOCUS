@@ -5,6 +5,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.init as init
 from torch import Tensor
 
@@ -129,7 +130,7 @@ class NiceEEG(BaseModel):
         
         eeg_features = self.Enc_eeg(eeg)
         eeg_features = self.Proj_eeg(eeg_features)
-        eeg_features = eeg_features / eeg_features.norm(dim=1, keepdim=True)
+        eeg_features = F.normalize(eeg_features, dim=-1)
 
         # img_features = self.Enc_img(img).last_hidden_state[:,0,:]
         # ensure encoder is in eval (dropout off, batchnorm stats frozen)
@@ -137,7 +138,7 @@ class NiceEEG(BaseModel):
         with torch.no_grad():
             img_features = self.Enc_img.get_image_features(img_features)
         img_features = self.Proj_img(img_features)
-        img_features = img_features / img_features.norm(dim=1, keepdim=True)
+        img_features = F.normalize(img_features, dim=-1)
 
         # cosine similarity as the logits
         logit_scale = self.logit_scale.exp()
@@ -163,7 +164,7 @@ class NiceEEG(BaseModel):
         eeg = batch['eeg'].unsqueeze(1)  # [B, 1, C, T]
 
         eeg_features = self.Proj_eeg(self.Enc_eeg(eeg))
-        eeg_features = eeg_features / eeg_features.norm(dim=1, keepdim=True)
+        eeg_features = F.normalize(eeg_features, dim=-1)
         
         preds, scores = self.compute_predictions(eeg_features)
         return preds, labels, scores, None, subjects
@@ -173,6 +174,7 @@ class NiceEEG(BaseModel):
         if isinstance(eeg_features, list):
             eeg_features = eeg_features[2]
         proj_feature_centers = self.Proj_img(self.feature_centers)
+        proj_feature_centers = F.normalize(proj_feature_centers, dim=-1)
         scores = (100.0 * eeg_features @ proj_feature_centers.t()).softmax(dim=-1)  # no use 100?
         preds = torch.argmax(scores, dim=1)
         return preds, scores
