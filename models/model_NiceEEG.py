@@ -172,6 +172,7 @@ class NiceEEG(BaseModel):
         # eeg_features through logits is dirty hack to compute predictions for training
         if isinstance(eeg_features, list):
             eeg_features = eeg_features[2]
-        scores = (100.0 * eeg_features @ self.feature_centers.t()).softmax(dim=-1)  # no use 100?
+        proj_feature_centers = self.Proj_img(self.feature_centers)
+        scores = (100.0 * eeg_features @ proj_feature_centers.t()).softmax(dim=-1)  # no use 100?
         preds = torch.argmax(scores, dim=1)
         return preds, scores
