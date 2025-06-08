@@ -99,7 +99,7 @@ def train_and_evaluate(dataset_conf, model_conf):
         # 2b) Instantiate fresh model
         ModelClass = model_conf['class']
         model_args = model_conf['args'].copy()
-        model = ModelClass(**model_args).to(DEVICE)
+        model = ModelClass(device=DEVICE, **model_args)
         total_params, trainable_params = model.count_params()
         print(f"[{split_name}] Initialized model '{model_conf['name']}' → total_params={total_params}, trainable_params={trainable_params}")
 
