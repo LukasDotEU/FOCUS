@@ -1,6 +1,7 @@
 from datasets.eegImageNet_dataset import EEGImageNet
 from models.model_EEGNet import EEGNet
 from models.model_EEGChannelNet import EEGChannelNet
+from models.model_NiceEEG import NiceEEG
 
 # Parameters to add: Epochs, Batch size
 
@@ -61,6 +62,25 @@ MODEL_CONFIGS = [
         'epochs': 100,
         'batch_size': 16
     },
+	{
+		'name': 'NiceEEG',
+		'class': NiceEEG,
+		'args': {
+			'img_embedding_dim': 768,
+            'proj_dim': 768,
+			'k': 40,
+			'm1': 25,
+			'm2': 51,
+			's': 5,
+			'lr': 2e-4,
+			'b1': 0.5,
+			'b2': 0.999
+        },
+		'pretraining': False,
+		'use_images': True,
+		'epochs': 200,
+		'batch_size': 256 #?
+    },
     # Add more model configurations here...
 ]
 
@@ -69,7 +89,7 @@ MODEL_CONFIGS = [
 SELECTED_CONFIGS = [
     {
         'dataset': 'EEGImageNet',
-        'model': 'EEGNet'
+        'model': 'NiceEEG'
     },
     # Add more combinations as desired...
 ]

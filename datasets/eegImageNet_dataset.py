@@ -7,7 +7,7 @@ from .base_dataset import BaseEEGDataset
 
 class EEGImageNet(BaseEEGDataset):
     def __init__(self, eeg_root, images_root,
-                 use_images=False, preload_images=True, image_transform=None):
+                 use_images=False, preload_images=False, image_transform=None):
         """
         pth_file: path to the .pth containing:
           {
@@ -120,4 +120,8 @@ class EEGImageNet(BaseEEGDataset):
         img_path = os.path.join(self.images_root, class_label, filename)
 
         with Image.open(img_path).convert('RGB') as img:
-            return self.image_transform(img)
+            # processor returns a batch; grab the single sample
+            processed = self.processor(images=img, return_tensors="pt")
+            # pixel_values has shape (1, 3, H, W) → drop batch dim
+            pixel_values = processed.pixel_values.squeeze(0)
+            return pixel_values

@@ -78,7 +78,6 @@ class EEGNet(BaseModel):
                     F1: int = 8,
                     F2: int = 16,
                     D: int = 2,
-                    num_classes: int = 40,
                     kernel_1: int = 64,
                     kernel_2: int = 16,
                     dropout: float = 0.25,
@@ -89,7 +88,6 @@ class EEGNet(BaseModel):
         self.F1 = F1
         self.F2 = F2
         self.D = D
-        self.num_classes = num_classes
         self.kernel_1 = kernel_1
         self.kernel_2 = kernel_2
         self.dropout = dropout
@@ -109,7 +107,7 @@ class EEGNet(BaseModel):
             nn.BatchNorm2d(self.F1 * self.D, momentum=0.01, affine=True, eps=1e-3),
             nn.ELU(),
             nn.AvgPool2d((1, 4), stride=4),
-            nn.Dropout(p=dropout)
+            nn.Dropout(self.dropout)
         )
 
         # Block 2: Separable convolution.
@@ -124,10 +122,10 @@ class EEGNet(BaseModel):
             nn.BatchNorm2d(self.F2, momentum=0.01, affine=True, eps=1e-3),
             nn.ELU(),
             nn.AvgPool2d((1, 8), stride=8),
-            nn.Dropout(p=dropout)
+            nn.Dropout(self.dropout)
         )
 
-        self.lin = nn.Linear(self.feature_dim(), num_classes, bias=False)
+        self.lin = nn.Linear(self.feature_dim(), self.num_classes, bias=False)
         self.loss_fn = nn.CrossEntropyLoss()
         self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()),
                                           lr=self.learning_rate)
@@ -177,6 +175,13 @@ class EEGNet(BaseModel):
         labels = batch['class_idx']
         subjects = list(batch['subject'])
         logits = self.forward(batch)
+        preds, scores = self.compute_predictions(logits)
+        return preds, labels, scores, None, subjects
+    
+    def compute_predictions(self, logits):
+        """
+        Compute predictions from logits.
+        """
         scores = torch.softmax(logits, dim=1)
         preds = torch.argmax(scores, dim=1)
-        return preds, labels, scores, None, subjects
+        return preds, scores

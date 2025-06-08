@@ -28,16 +28,14 @@ class BaseEEGDataset(Dataset):
         self.use_images = use_images
         self.preload_images = preload_images
 
-        # Set up image transform (if none provided, use a default CLIP‐style pipeline)
-        if image_transform is None:
-            self.image_transform = transforms.Compose([
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225]),
-            ])
-        else:
-            self.image_transform = image_transform
+        if self.use_images:
+            from transformers import CLIPImageProcessor
+            # TODO: Make it depandant on the model used.
+            # Set up image transform (if none provided, use a default CLIP pipeline)
+            if image_transform is None:
+                self.processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14", cache_dir=".cache")
+            else:
+                self.processor = image_transform
 
         # Subclasses must create a DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx']
         self.metadata = pd.DataFrame(columns=['idx', 'subject', 'class_idx', 'image_idx'])

@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader, Subset
 from datasets.eegImageNet_dataset import EEGImageNet
 
 # Import model classes
+from models import model_base
 from models.model_EEGNet import EEGNet
 
 # Import utilities
@@ -99,7 +100,7 @@ def train_and_evaluate(dataset_conf, model_conf):
         # 2b) Instantiate fresh model
         ModelClass = model_conf['class']
         model_args = model_conf['args'].copy()
-        model = ModelClass(**model_args).to(DEVICE)
+        model: model_base = ModelClass(device=DEVICE, **model_args)
         total_params, trainable_params = model.count_params()
         print(f"[{split_name}] Initialized model '{model_conf['name']}' → total_params={total_params}, trainable_params={trainable_params}")
 
@@ -112,7 +113,7 @@ def train_and_evaluate(dataset_conf, model_conf):
         # Training loop.
         for epoch in range(epochs):
             with Timer() as t_train:
-                avg_loss = model.train_one_epoch(train_loader)
+                avg_loss, train_metrics = model.train_one_epoch(train_loader, evaluator)
             train_time = t_train.elapsed
 
             val_metrics = model.evaluate_on_dataloader(val_loader, evaluator)
@@ -123,7 +124,7 @@ def train_and_evaluate(dataset_conf, model_conf):
                 best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
 
             print(
-                f"[{split_name}] Epoch {epoch+1} → Loss={avg_loss:.4f}, "
+                f"[{split_name}] Epoch {epoch+1} → Loss={avg_loss:.4f} Train_F1={train_metrics['f1']:.4f}, "
                 f"Val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})"
             )
 
