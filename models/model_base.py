@@ -56,7 +56,7 @@ class BaseModel(nn.Module):
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         return total, trainable
 
-    def train_one_epoch(self, dataloader):
+    def train_one_epoch(self, dataloader, evaluator):
         """
         Performs a basic training loop for one epoch.
         Returns the average loss over batches.
@@ -65,12 +65,17 @@ class BaseModel(nn.Module):
         running_loss = 0.0
         n_batches = 0
 
+        all_preds = []
+        all_labels = []
+        all_scores = []
+
         for batch in dataloader:
             # Move tensors to the correct device.
             for key, value in batch.items():
                 if isinstance(value, torch.Tensor):
                     batch[key] = value.to(self.device)
 
+            # TODO: check order of zero_grad and forward
             self.optimizer.zero_grad()
             logits = self.forward(batch)
             loss = self.compute_loss(batch, logits)
@@ -80,8 +85,25 @@ class BaseModel(nn.Module):
             running_loss += loss.item()
             n_batches += 1
 
+            with torch.no_grad():
+                preds, scores = self.compute_predictions(logits)
+
+            all_preds.append(preds)
+            all_labels.append(batch['class_idx'])
+            if scores is not None:
+                all_scores.append(scores)
+
+        all_preds = torch.cat(all_preds).cpu().numpy()
+        all_labels = torch.cat(all_labels).cpu().numpy()
+        all_scores = torch.cat(all_scores).cpu().numpy() if all_scores else None
+        results = evaluator.compute_metrics(
+            y_true=all_labels,
+            y_pred=all_preds,
+            y_score=all_scores
+        )
+
         avg_loss = running_loss / n_batches
-        return avg_loss
+        return avg_loss, results
 
     def evaluate_on_dataloader(self, dataloader, evaluator):
         """

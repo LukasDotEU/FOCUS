@@ -175,6 +175,13 @@ class EEGNet(BaseModel):
         labels = batch['class_idx']
         subjects = list(batch['subject'])
         logits = self.forward(batch)
+        preds, scores = self.compute_predictions(logits)
+        return preds, labels, scores, None, subjects
+    
+    def compute_predictions(self, logits):
+        """
+        Compute predictions from logits.
+        """
         scores = torch.softmax(logits, dim=1)
         preds = torch.argmax(scores, dim=1)
-        return preds, labels, scores, None, subjects
+        return preds, scores

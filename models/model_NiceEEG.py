@@ -144,10 +144,11 @@ class NiceEEG(BaseModel):
         logits_per_eeg = logit_scale * eeg_features @ img_features.t()
         logits_per_img = logits_per_eeg.t()
 
-        return [logits_per_eeg, logits_per_img]
+        # return of eeg_features is dirty hack to compute predictions later
+        return [logits_per_eeg, logits_per_img, eeg_features]
     
     def compute_loss(self, batch, logits):
-        logits_per_eeg, logits_per_img = logits
+        logits_per_eeg, logits_per_img, _ = logits
         labels = torch.arange(batch['eeg'].shape[0]).to(self.device)  # used for the loss
 
         loss_eeg = self.loss_fn(logits_per_eeg, labels)
@@ -163,26 +164,14 @@ class NiceEEG(BaseModel):
 
         eeg_features = self.Proj_eeg(self.Enc_eeg(eeg))
         eeg_features = eeg_features / eeg_features.norm(dim=1, keepdim=True)
+        
+        preds, scores = self.compute_predictions(eeg_features)
+        return preds, labels, scores, None, subjects
+    
+    def compute_predictions(self, eeg_features):
+        # eeg_features through logits is dirty hack to compute predictions for training
+        if isinstance(eeg_features, list):
+            eeg_features = eeg_features[2]
         scores = (100.0 * eeg_features @ self.feature_centers.t()).softmax(dim=-1)  # no use 100?
         preds = torch.argmax(scores, dim=1)
-        return preds, labels, scores, None, subjects
-
-
-        
-# Image2EEG
-class IE():
-    def __init__(self):
-        super(IE, self).__init__()
-
-    def get_eeg_data(self):
-        test_label = np.arange(200)
-        train_data = np.mean(train_data, axis=1)
-        train_data = np.expand_dims(train_data, axis=1)
-        test_data = np.mean(test_data, axis=1)
-        test_data = np.expand_dims(test_data, axis=1)
-
-    def train(self):
-
-        train_eeg, _, test_eeg, test_label = self.get_eeg_data()
-        train_img_feature = self.get_image_data() 
-        test_center = np.load('./dnn_feature/center_clip.npy', allow_pickle=True)
+        return preds, scores
