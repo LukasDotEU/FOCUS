@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+from utils.metrics import Evaluator
+
 class BaseModel(nn.Module):
     """
     Abstract base class providing a common interface. Subclasses must implement:
@@ -47,6 +49,14 @@ class BaseModel(nn.Module):
           - optionally: confidence scores or embeddings.
         """
         raise NotImplementedError
+    
+    def compute_predictions(self, logits_or_eegfeatures):
+        """
+        Runs inference on a batch (in eval mode) and returns:
+          - preds: Tensor of shape [batch_size] (int labels);
+          - optionally: confidence scores or embeddings.
+        """
+        raise NotImplementedError
 
     def count_params(self):
         """
@@ -56,7 +66,7 @@ class BaseModel(nn.Module):
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         return total, trainable
 
-    def train_one_epoch(self, dataloader, evaluator):
+    def train_one_epoch(self, dataloader, evaluator: Evaluator):
         """
         Performs a basic training loop for one epoch.
         Returns the average loss over batches.
@@ -105,7 +115,7 @@ class BaseModel(nn.Module):
         avg_loss = running_loss / n_batches
         return avg_loss, results
 
-    def evaluate_on_dataloader(self, dataloader, evaluator):
+    def evaluate_on_dataloader(self, dataloader, evaluator: Evaluator):
         """
         Runs inference over the dataloader, collects predictions, labels,
         (and optionally scores or embeddings) and uses the evaluator
