@@ -106,7 +106,8 @@ def train_and_evaluate(dataset_conf, model_conf):
         model_args = model_conf['args'].copy()
         model: BaseModel = ModelClass(device=DEVICE, **model_args)
         total_params, trainable_params = model.count_params()
-        print(f"[{split_name}] Initialized model '{model_conf['name']}' → total_params={total_params}, trainable_params={trainable_params}")
+        print(f"[{split_name}] Initialized model '{model_conf['name']}' with '{ds_conf['name']}'")
+        print(f"[{split_name}] total_params={total_params}, trainable_params={trainable_params}")
 
         # 2c) Training loop (track best-F1 on validation)
         evaluator = Evaluator(average='macro')
