@@ -24,6 +24,9 @@ model = CLIPModel.from_pretrained("openai/clip-vit-large-patch14", cache_dir=".c
 model = torch.nn.DataParallel(model).cuda()
 processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14", cache_dir=".cache")
 
+processed = []
+OVERRIDE = False  # Set to True to reprocess all datasets regardless of existing files
+
 for ds in DATASET_CONFIGS:
     # Process only datasets with an image directory specified.
     if "images_root" not in ds:
@@ -32,6 +35,18 @@ for ds in DATASET_CONFIGS:
     dataset_name = ds["name"]
     project_dir = ds["images_root"]
     print(f"Processing dataset '{dataset_name}' at {project_dir}")
+
+    output_path = os.path.join(project_dir, f"clip_center_features.npy")
+    # Check if the output file already exists to avoid reprocessing
+    if os.path.exists(output_path) and not OVERRIDE:
+        print(f"File for dataset '{dataset_name}' (or similar) already exists, skipping.")
+        continue
+
+    # Check if the project directory has already been processed
+    if project_dir in processed:
+        print(f"Dataset '{dataset_name}' (or similar) already processed, skipping.")
+        continue
+    processed.append(project_dir)
 
     # Get a sorted list of first-level subdirectories
     # Important as this ensures consistent ordering of conditions
@@ -72,7 +87,7 @@ for ds in DATASET_CONFIGS:
         "clip_center_features_names": subfolders,
     }
 
-    # If the dataset configuration has an EEG root, reorder the features.
+    # Reorder features for EEGImageNet as original class_id order is not alphabetical.
     if "EEGImageNet" == dataset_name:
         print("Reordering features based on EEG labels...")
         # Load the EEG file that contains the class names (labels)
@@ -101,6 +116,5 @@ for ds in DATASET_CONFIGS:
         }
 
     # Save the result as a dataset-specific file
-    output_path = os.path.join(project_dir, f"clip_center_features.npy")
     np.save(output_path, center_features_names)
     print(f"Saved features for dataset '{dataset_name}' at {output_path}")
