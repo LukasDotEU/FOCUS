@@ -1,4 +1,5 @@
 from datasets.eegImageNet_dataset import EEGImageNet
+from datasets.thingsEEG2_dataset import ThingsEEG2
 from models.model_EEGNet import EEGNet
 from models.model_EEGChannelNet import EEGChannelNet
 from models.model_NiceEEG import NiceEEG
@@ -15,12 +16,61 @@ DATASET_CONFIGS = [
         'time_steps': 440,
         'num_electrodes': 128,
         'num_classes': 40,
+		'model_args': {
+			'EEGChannelNet': {
+				'num_residual_blocks': 4
+            },
+			'NiceEEG': {
+				'clip_centers_file': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/clip_center_features.npy',
+            },
+        },
+    },
+	{
+		'name': 'ThingsEEG2',
+		'class': ThingsEEG2,
+		'eeg_root': '../Datasets/Things-EEG2/Preprocessed_data_250Hz/',
+		'images_root': '../Datasets/Things-EEG2/Image_set/',
+		'time_steps': 250,
+		'num_electrodes': 63,
+		'num_classes': 1654,
+		'args': {
+			'average_reps': False,
+        },
+		'model_args': {
+			'EEGChannelNet': {
+				'num_residual_blocks': 3
+            },
+			'NiceEEG': {
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
+            },
+        },
+    },
+	{
+		'name': 'ThingsEEG2Averaged',
+		'class': ThingsEEG2,
+		'eeg_root': '../Datasets/Things-EEG2/Preprocessed_data_250Hz/',
+		'images_root': '../Datasets/Things-EEG2/Image_set/',
+		'time_steps': 250,
+		'num_electrodes': 63,
+		'num_classes': 1654,
+		'args': {
+			'average_reps': True,
+        },
+		'model_args': {
+			'EEGChannelNet': {
+				'num_residual_blocks': 3
+            },
+			'NiceEEG': {
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
+            },
+        },
     },
     # Add more dataset configurations here...
 ]
 
 # All available model configurations.
 MODEL_CONFIGS = [
+	# EEGImageNet: 208 -> 40; ThingsEEG2: 624 -> 1654
     {
         'name': 'EEGNet',
         'class': EEGNet,
@@ -38,6 +88,7 @@ MODEL_CONFIGS = [
         'epochs': 100,
         'batch_size': 64
     },
+	# EEGImageNet: 500 -> 1000 -> 40, ThingsEEG2: 600 -> 1000 -> 1654
     {
         'name': 'EEGChannelNet',
         'class': EEGChannelNet,
@@ -52,7 +103,7 @@ MODEL_CONFIGS = [
             'num_temp_layers': 4,
             'num_spatial_layers': 4,
             'spatial_stride': (2,1),
-            'num_residual_blocks': 4,
+            # 'num_residual_blocks': 4, # -> Managed Dataset dependant
             'down_kernel': 3,
             'down_stride': 2,
             'learning_rate': 1e-3
@@ -62,6 +113,7 @@ MODEL_CONFIGS = [
         'epochs': 100,
         'batch_size': 16
     },
+	# EEGImageNet: 2960 -> 768, ThingsEEG2: 1440 -> 768
 	{
 		'name': 'NiceEEG',
 		'class': NiceEEG,
@@ -88,8 +140,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        'dataset': 'EEGImageNet',
-        'model': 'NiceEEG'
+        'dataset': 'ThingsEEG2Averaged',
+        'model': 'NiceEEG',
     },
     # Add more combinations as desired...
 ]
