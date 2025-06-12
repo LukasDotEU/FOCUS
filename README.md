@@ -10,9 +10,6 @@ This repository implements several methods for evaluating EEG signals in combina
 - **config.py**  
   Central configuration file containing dataset and model configuration parameters ([config.py](config.py)).
 
-- **datasets.md [non existent yet]**  
-  Documentation for the datasets used in the framework ([datasets.md](datasets.md)).
-
 - **eeg-object-eval.yml**  
   Conda environment file for the project dependencies ([eeg-object-eval.yml](eeg-object-eval.yml)).
 
@@ -25,7 +22,7 @@ This repository implements several methods for evaluating EEG signals in combina
   Contains implementations for dataset loading:
   - [`base_dataset.py`](datasets/base_dataset.py): Defines the abstract base class for EEG/Image datasets.
   - [`eegImageNet_dataset.py`](datasets/eegImageNet_dataset.py): Implements the EEGImageNet dataset.
-#  - [`thingsEEG2_dataset.py`](datasets/thingsEEG2_dataset.py): Implements the ThingsEEG2 dataset.
+  - [`thingsEEG2_dataset.py`](datasets/thingsEEG2_dataset.py): Implements the ThingsEEG2 dataset.
 
 - **models/**  
   Contains implementations of various neural network models:
@@ -49,7 +46,7 @@ This repository implements several methods for evaluating EEG signals in combina
 1. **Clone the Repository**
 
    ```sh
-   git clone <your-repo-url>
+   git clone <repo-url>
    cd eeg-object-eval
    ```
 
@@ -57,8 +54,39 @@ This repository implements several methods for evaluating EEG signals in combina
 
    ```sh
    conda env create -f eeg-object-eval.yml
-   conda activate <env-name>
+   conda activate eeg-object-eval
    ```
+
+## Datasets
+
+All datasets should be placed in separate folders within a sibling directory of this project named **Datasets**.
+
+This document lists the datasets used in this project along with their sources.
+
+### EEGImageNet
+
+**EEG Data**
+
+- Repository: [EEG Visual Classification](https://github.com/perceivelab/eeg_visual_classification)
+- Source (OneDrive): [EEG Visual Data (CVPR 2017)](https://studentiunict-my.sharepoint.com/personal/concetto_spampinato_unict_it/_layouts/15/onedrive.aspx?id=%2Fpersonal%2Fconcetto%5Fspampinato%5Funict%5Fit%2FDocuments%2Fsito%5FPeRCeiVe%2Fdatasets%2Feeg%5Fcvpr%5F2017&ga=1)
+
+**ImageNet Images**
+
+Two sources are available for the ImageNet images corresponding to each of the 40 classes:
+
+1. **Complete Set** (containing more than the used images)
+   - Repository: [BrainVis](https://github.com/RomGai/BrainVis)
+   - Download: [Google Drive Link](https://drive.google.com/file/d/1k3Psdqhl0Saiol4Yauy6eCQK6_-Em05R/view?usp=drive_link)
+   
+2. **Used Images Subset** (containing only the used images)
+   - Repository: [DreamDiffusion](https://github.com/bbaaii/DreamDiffusion)
+   - Download: [Google Drive Link](https://drive.google.com/file/d/1y7I9bG1zKYqBM94odcox_eQjnP9HGo9-/view?usp=drive_link)
+
+> **Note:** The image `n03452741_17620.JPEG` was taken from the BrainVis subset because it was corrupted in the DreamDiffusion subset.
+
+### ThingsEEG2
+
+- Repository & Data: [ThingsEEG2 on OSF](https://osf.io/3jk45/)
 
 ## Running the Framework
 
@@ -86,7 +114,7 @@ To extract image features (center features per class) for datasets using CLIP, r
 python preprocessing/NiceEEG_preprocessing.py
 ```
 
-*Note*: Make sure to run this script from the project root directory due to relative path dependencies.
+> **Note**: Make sure to run this script from the project root directory due to relative path dependencies.
 
 ## Contributing
 
