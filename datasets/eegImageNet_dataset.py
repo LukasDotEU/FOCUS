@@ -64,7 +64,7 @@ class EEGImageNet(BaseEEGDataset):
         self._image_cache = {}
         if self.use_images and self.preload_images:
             for idx, class_idx, image_idx in zip(self.metadata['idx'], self.metadata['class_idx'], self.metadata['image_idx']):
-                self._image_cache[idx] = self._load_image(self.class_labels[class_idx], self.image_labels[image_idx])
+                self._image_cache[idx] = self._load_image(class_idx, image_idx)
 
     def __len__(self):
         return len(self.metadata)
@@ -73,26 +73,25 @@ class EEGImageNet(BaseEEGDataset):
         """
         Returns a dict:
           {
-            'eeg'      : Tensor [128, 500],
+            'eeg'      : Tensor [ch (128), t (440)],
             'class_idx': int,
             'image_idx': int,
             'subject'  : int,
-            'image'    : Tensor [3, X, Y] or None
+            'image'    : Tensor [3, X (224), Y (224)] (if use_images=True, else not present)
           }
         """
-        row = self.metadata[self.metadata['idx'] == idx].iloc[0]  # Get the row for this index
+        row = self.metadata.iloc[idx]  # Get the row for this index
 
-        eeg = self.samples[idx]['eeg'][:,20:460] # Tensor [440, 128]
+        eeg = self.samples[idx]['eeg'][:,20:460] # Tensor [ch (128), 440]
         class_idx = row['class_idx']   # int
         image_idx = row['image_idx']   # int
         subject = row['subject']       # int
-        img_tensor = None
 
         if self.use_images:
             if self.preload_images:
                 img_tensor = self._image_cache[idx]
             else:
-                img_tensor = self._load_image(self.class_labels[class_idx], self.image_labels[image_idx])
+                img_tensor = self._load_image(class_idx, image_idx)
             return {
                 'eeg': eeg,
                 'class_idx': class_idx,
@@ -108,16 +107,12 @@ class EEGImageNet(BaseEEGDataset):
                 'subject': subject
             }
 
-    def _load_image(self, class_label, image_label):
+    def _load_image(self, class_idx, image_idx):
         """
-        Given an image index, look up its label string in self.image_labels.
-        Each label is formatted as '{class_label}_{image_label}'. We split
-        on the first underscore to find the class subfolder, then load
-        images_root/class_label/{class_label}_{image_label}.JPEG, apply
-        transforms, and return a torch.Tensor.
+        We load images_root/class_label/{image_label}.JPEG, apply transforms, and return a torch.Tensor.
         """
-        filename = f"{image_label}.JPEG"
-        img_path = os.path.join(self.images_root, class_label, filename)
+        filename = f"{self.image_labels[image_idx]}.JPEG"
+        img_path = os.path.join(self.images_root, self.class_labels[class_idx], filename)
 
         with Image.open(img_path).convert('RGB') as img:
             # processor returns a batch; grab the single sample

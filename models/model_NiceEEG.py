@@ -73,8 +73,9 @@ class NiceEEG(BaseModel):
     def __init__(self, num_classes, device='cuda', **kwargs):
         super().__init__(num_classes, device=device, **kwargs)
     
-    def build_model(self, time_steps: int, num_electrodes: int, img_embedding_dim: int = 768, 
-                    proj_dim: int = 768, k: int = 40, m1:int = 25, m2:int = 51, s:int = 5,
+    def build_model(self, time_steps: int, num_electrodes: int, clip_centers_file: str, 
+                    img_embedding_dim: int = 768, proj_dim: int = 768, 
+                    k: int = 40, m1:int = 25, m2:int = 51, s:int = 5, 
                     lr: int = 2e-4, b1: float = 0.5, b2: float = 0.999):
         self.time_steps = time_steps
         self.num_electrodes = num_electrodes
@@ -118,8 +119,7 @@ class NiceEEG(BaseModel):
             lr=lr, betas=(b1, b2)
         )
 
-        project_dir ='../Datasets/EEGImageNet/OnlyUsedImageNet40Images'
-        load_dir = os.path.join(project_dir, 'clip_center_features.npy')
+        load_dir = os.path.join(clip_centers_file)
         feature_center_names = np.load(load_dir, allow_pickle=True).item()
         self.feature_centers = torch.from_numpy(feature_center_names['clip_center_features']).to(self.device)
 

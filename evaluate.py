@@ -4,12 +4,8 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader, Subset
 
-# Import dataset classes
-from datasets.eegImageNet_dataset import EEGImageNet
-
-# Import model classes
-from models import model_base
-from models.model_EEGNet import EEGNet
+# Import base model class
+from models.model_base import BaseModel
 
 # Import utilities
 from utils.metrics import Evaluator
@@ -45,11 +41,19 @@ def train_and_evaluate(dataset_conf, model_conf):
 
     # 1) Instantiate the full dataset
     DSClass = dataset_conf['class']
-    full_dataset = DSClass(
-        eeg_root=dataset_conf['eeg_root'],
-        images_root=dataset_conf['images_root'],
-        use_images=model_conf['use_images']  # Forward use_images to the dataset.
-    )
+    if 'args' in dataset_conf:
+        full_dataset = DSClass(
+            eeg_root=dataset_conf['eeg_root'],
+            images_root=dataset_conf['images_root'],
+            use_images=model_conf['use_images'],
+            **dataset_conf['args'],
+        )
+    else:
+        full_dataset = DSClass(
+            eeg_root=dataset_conf['eeg_root'],
+            images_root=dataset_conf['images_root'],
+            use_images=model_conf['use_images'],
+        )
 
     # Build outer splits
     splitter = SplitGenerator(full_dataset.metadata)
@@ -100,7 +104,7 @@ def train_and_evaluate(dataset_conf, model_conf):
         # 2b) Instantiate fresh model
         ModelClass = model_conf['class']
         model_args = model_conf['args'].copy()
-        model: model_base = ModelClass(device=DEVICE, **model_args)
+        model: BaseModel = ModelClass(device=DEVICE, **model_args)
         total_params, trainable_params = model.count_params()
         print(f"[{split_name}] Initialized model '{model_conf['name']}' → total_params={total_params}, trainable_params={trainable_params}")
 
@@ -200,6 +204,11 @@ if __name__ == "__main__":
         m_conf['args']['time_steps'] = ds_conf['time_steps']
         m_conf['args']['num_electrodes'] = ds_conf['num_electrodes']
         m_conf['args']['num_classes'] = ds_conf['num_classes']
+
+        # retrieve specific model args depandant on dataset.
+        if model_name in ds_conf['model_args'].keys():
+            for k, v in ds_conf['model_args'][model_name].items():
+                m_conf['args'][k] = v
 
         res = train_and_evaluate(ds_conf, m_conf)
         all_results.extend(res)
