@@ -249,28 +249,19 @@ class SubjectEmbedding(nn.Module):
             return self.subject_embedding(subject_ids).unsqueeze(1)
     
 class DataEmbedding(nn.Module):
-    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, joint_train=False, num_subjects=None):
+    def __init__(self, c_in, d_model, embed_type='fixed', freq='h', dropout=0.1, num_subjects=None):
         super(DataEmbedding, self).__init__()
-        if joint_train and num_subjects is not None:
-            self.value_embedding = nn.ModuleDict({
-                str(subject_id): nn.Linear(c_in, d_model) for subject_id in range(num_subjects)
-            })
-        else:
-            self.value_embedding = nn.Linear(c_in, d_model)  # 如果没有指定subjects，则使用单一的value embedding
+
+        self.value_embedding = nn.Linear(c_in, d_model)  # 如果没有指定subjects，则使用单一的value embedding
 
         self.position_embedding = PositionalEmbedding(d_model=d_model)
         self.temporal_embedding = TemporalEmbedding(d_model=d_model, embed_type=embed_type, freq=freq) if embed_type != 'timeF' else TimeFeatureEmbedding(d_model=d_model, embed_type=embed_type, freq=freq)
         self.dropout = nn.Dropout(p=dropout)
         self.subject_embedding = SubjectEmbedding(num_subjects, d_model) if num_subjects is not None else None
         self.mask_token = nn.Parameter(torch.randn(1, d_model))  # Mask token embedding
-        self.joint_train = joint_train
         
     def forward(self, x, x_mark, subject_ids=None, mask=None):
-        if self.joint_train:
-            # 使用针对每个subject的特定value embedding
-            x = torch.stack([self.value_embedding[str(subject_id.item())](x[i]) for i, subject_id in enumerate(subject_ids)])
-        else:
-            x = self.value_embedding(x)
+        x = self.value_embedding(x)
 
         if x_mark is not None:
             x = x + self.temporal_embedding(x_mark) + self.position_embedding(x)
@@ -385,14 +376,12 @@ class ClipLoss(nn.Module):
 # -------------- from ATMS_retrieval.py
 
 class iTransformer(nn.Module):
-    def __init__(self, configs, joint_train=False,  num_subjects=10):
+    def __init__(self, configs, num_subjects=10):
         super(iTransformer, self).__init__()
-        self.task_name = configs.task_name
         self.seq_len = configs.seq_len
-        self.pred_len = configs.pred_len
         self.output_attention = configs.output_attention
         # Embedding
-        self.enc_embedding = DataEmbedding(configs.seq_len, configs.d_model, configs.embed, configs.freq, configs.dropout, joint_train=False, num_subjects=num_subjects)
+        self.enc_embedding = DataEmbedding(configs.seq_len, configs.d_model, configs.embed, configs.freq, configs.dropout, num_subjects=num_subjects)
         # Encoder
         self.encoder = Encoder(
             [
@@ -419,7 +408,7 @@ class iTransformer(nn.Module):
         return enc_out
 
 
-
+# Same as NiceEEG except .unsqueeze()
 class PatchEmbedding(nn.Module):
     def __init__(self, emb_size=40):
         super().__init__()
@@ -494,9 +483,7 @@ class Proj_eeg(nn.Sequential):
 
 class Config:
     def __init__(self):
-        self.task_name = 'classification'  # Example task name
         self.seq_len = 250                 # Sequence length
-        self.pred_len = 250                # Prediction length
         self.output_attention = False      # Whether to output attention weights
         self.d_model = 250                 # Model dimension
         self.embed = 'timeF'               # Time encoding method
@@ -514,19 +501,14 @@ class ATMS(nn.Module):
     def __init__(self, num_channels=63, sequence_length=250, num_subjects=2, num_features=64, num_latents=1024, num_blocks=1):
         super(ATMS, self).__init__()
         default_config = Config()
-        self.encoder = iTransformer(default_config)   
-        self.subject_wise_linear = nn.ModuleList([nn.Linear(default_config.d_model, sequence_length) for _ in range(num_subjects)])
-        self.enc_eeg = Enc_eeg()
-        self.proj_eeg = Proj_eeg()        
+        self.encoder = iTransformer(default_config)
+        self.enc_eeg = Enc_eeg() # Same as NiceEEG
+        self.proj_eeg = Proj_eeg() # Same as NiceEEG    
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
         self.loss_func = ClipLoss()       
          
     def forward(self, x, subject_ids):
         x = self.encoder(x, None, subject_ids)
-        # print(f'After attention shape: {x.shape}')
-        # print("x", x.shape)
-        # x = self.subject_wise_linear[0](x)
-        # print(f'After subject-specific linear transformation shape: {x.shape}')
         eeg_embedding = self.enc_eeg(x)
         
         out = self.proj_eeg(eeg_embedding)
