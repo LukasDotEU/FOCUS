@@ -21,7 +21,6 @@ class SubjectEmbedding(nn.Module):
         super(SubjectEmbedding, self).__init__()
         self.subject_embedding = nn.Embedding(num_subjects, d_model)
         self.shared_embedding = nn.Parameter(torch.randn(1, d_model))  # Shared token for unknown subjects
-        self.mask_embedding = nn.Parameter(torch.randn(1, d_model))  # Mask token embedding
 
     def forward(self, subject_ids):
         if subject_ids[0] is None or torch.any(subject_ids >= self.subject_embedding.num_embeddings):
@@ -38,13 +37,9 @@ class DataEmbedding(nn.Module):
 
         self.dropout = nn.Dropout(p=dropout)
         self.subject_embedding = SubjectEmbedding(num_subjects, d_model) if num_subjects is not None else None
-        self.mask_token = nn.Parameter(torch.randn(1, d_model))  # Mask token embedding
         
-    def forward(self, x, subject_ids=None, mask=None):
+    def forward(self, x, subject_ids=None):
         x = self.value_embedding(x)
-
-        if mask is not None:
-            x = x * (~mask.bool()) + self.mask_token * mask.float()
 
         if self.subject_embedding is not None:
             subject_emb = self.subject_embedding(subject_ids)  # (batch_size, 1, d_model)
