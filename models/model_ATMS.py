@@ -111,42 +111,81 @@ class FullAttention(nn.Module):
 class SubjectEmbedding(nn.Module):
     def __init__(self, num_subjects, d_model):
         super().__init__()
-        self.subject_embedding = nn.Embedding(num_subjects, d_model)
-        self.shared_embedding = nn.Parameter(torch.randn(1, d_model))  # Shared token for unknown subjects
+        self.num_subjects = num_subjects
+        # Only create per-subject embeddings if more than one
+        if self.num_subjects > 1:
+            self.subject_embedding = nn.Embedding(num_subjects, d_model)
+        # Shared embedding always exists
+        self.shared_embedding = nn.Parameter(torch.randn(1, d_model))
 
     def forward(self, subject_ids):
-        if subject_ids[0] is None or torch.any(subject_ids >= self.subject_embedding.num_embeddings):
+        # If only one subject ever, always use shared
+        if self.num_subjects <= 1:
             batch_size = subject_ids.size(0)
             return self.shared_embedding.expand(batch_size, 1, -1)
-        else:
-            return self.subject_embedding(subject_ids).unsqueeze(1)
+
+        # Otherwise, per-sample: if sid < num_subjects use learned, else shared
+        emb_list = []
+        for sid in subject_ids:
+            if sid.item() < self.num_subjects:
+                emb_list.append(self.subject_embedding(sid))
+            else:
+                emb_list.append(self.shared_embedding.squeeze(0))
+        emb = torch.stack(emb_list, dim=0).unsqueeze(1)  # (batch_size, 1, d_model)
+        return emb
     
 class DataEmbedding(nn.Module):
-    def __init__(self, time_steps, d_model, num_subjects, dropout=0.1):
+    def __init__(self, time_steps, d_model, num_subjects, dropout=0.1, subject_dropout=0.1):
         super().__init__()
-        # Optimisation for forward to allow batch processing when only one linear layer
         self.num_subjects = num_subjects
-        if self.num_subjects == 1:
-            self.value_embedding = nn.ModuleDict({
-                str(sub): nn.Linear(time_steps, d_model) for sub in range(self.num_subjects)
+        self.subject_dropout = subject_dropout
+
+        # Create per-subject value embeddings only if >1
+        if self.num_subjects > 1:
+            self.subject_value_embeddings = nn.ModuleDict({
+                str(sub): nn.Linear(time_steps, d_model)
+                for sub in range(self.num_subjects)
             })
-        else:
-            self.value_embedding = nn.Linear(time_steps, d_model)  # 如果没有指定subjects，则使用单一的value embedding
+        # Shared value embedding
+        self.value_embedding = nn.Linear(time_steps, d_model)
 
         self.dropout = nn.Dropout(p=dropout)
         self.subject_embedding = SubjectEmbedding(self.num_subjects, d_model)
         
     def forward(self, x, subject_ids):
-        # TODO: .item() call necessary?
-        if self.num_subjects == 1:
-            x = torch.stack([self.value_embedding[str(subject_id.item())](x[i]) for i, subject_id in enumerate(subject_ids)])
-        else:
-            x = self.value_embedding(x)
+        batch_size = x.size(0)
 
+        # If only one subject ever, skip per-subject and dropout logic
+        if self.num_subjects <= 1:
+            # Shared path for all
+            x_emb = self.value_embedding(x)             # (batch_size, seq_len, d_model)
+            subject_emb = self.subject_embedding(subject_ids) # (batch_size, 1, d_model)
+            out = torch.cat([subject_emb, x_emb], dim=1) # (batch_size, seq_len+1, d_model)
+            return self.dropout(out)
+
+        # 1) Subject dropout: randomly mark some as unknown
+        if self.training and self.subject_dropout > 0:
+            mask = torch.rand(batch_size, device=subject_ids.device) < self.subject_dropout
+            subject_ids = subject_ids.clone()
+            subject_ids[mask] = self.num_subjects
+
+        # 2) Value embedding per sample
+        value_list = []
+        for i in range(batch_size):
+            sid = subject_ids[i].item()
+            # x[i]: (seq_len, time_steps)
+            if sid < self.num_subjects:
+                value_list.append(self.subject_value_embeddings[str(sid)](x[i])) # (seq_len, d_model)
+            else:
+                value_list.append(self.value_embedding(x[i]))                    # (seq_len, d_model)
+        x_emb = torch.stack(value_list, dim=0) # (batch_size, seq_len, d_model)
+
+        # 3) Subject token embedding (handles per-sample shared vs specific)
         subject_emb = self.subject_embedding(subject_ids)  # (batch_size, 1, d_model)
-        x = torch.cat([subject_emb, x], dim=1)  # 在序列维度上拼接 (batch_size, seq_len + 1, d_model)
 
-        return self.dropout(x)
+        # 4) Combine token + data
+        out = torch.cat([subject_emb, x_emb], dim=1)      # (batch_size, seq_len+1, d_model)
+        return self.dropout(out)
     
     
 # -------------- from ATMS_retrieval.py
@@ -200,11 +239,7 @@ class iTransformer(nn.Module):
 
     def forward(self, x_enc: Tensor, subject_ids) -> Tensor:
         enc_out = self.enc_embedding(x_enc, subject_ids)
-        # mask or src_key_padding_mask can be passed here if needed
-        enc_out = self.encoder(enc_out)  # returns (B, seq_len+1, d_model)
-        # slice off subject token if present and reduce to num_channels
-        print(enc_out.shape)
-        enc_out = enc_out[:, :63, :]
+        enc_out = self.encoder(enc_out)  # returns (B, ch+1, d_model)
         return enc_out
 
 
@@ -274,7 +309,8 @@ class ATMS(BaseModel):
         
         # Same as NiceEEG
         self.enc_eeg = nn.Sequential(
-            PatchEmbedding(k=k, m1=m1, m2=m2, s=s, ch=self.num_electrodes),
+            # 1 more channel because subject token
+            PatchEmbedding(k=k, m1=m1, m2=m2, s=s, ch=self.num_electrodes + 1),
             FlattenHead()
         )
 

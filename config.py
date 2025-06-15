@@ -25,7 +25,7 @@ DATASET_CONFIGS = [
 				'clip_centers_file': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/clip_center_features.npy',
             },
 			'ATMS': {
-				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
+				'clip_centers_file': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/clip_center_features_ATMS-tests.npy',
             },
         },
     },
@@ -48,7 +48,7 @@ DATASET_CONFIGS = [
 				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
             },
 			'ATMS': {
-				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features_ATMS-tests.npy',
             },
         },
     },
@@ -71,7 +71,7 @@ DATASET_CONFIGS = [
 				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
             },
 			'ATMS': {
-				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features_ATMS-tests.npy',
             },
         },
     },
