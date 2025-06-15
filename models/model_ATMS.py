@@ -325,7 +325,7 @@ class ATMS(BaseModel):
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
         self.loss_fn = ClipLoss()
-        self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()), lr=lr)
+        self.optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, self.parameters()), lr=lr)
 
         load_dir = os.path.join(clip_centers_file)
         feature_center_names = np.load(load_dir, allow_pickle=True).item()

@@ -168,7 +168,7 @@ MODEL_CONFIGS = [
 		'dataset_args': {
 			'clip_indiviual_feature_file': 'ATMS_clip_individual_features.pth'
         },
-		'epochs': 40,
+		'epochs': 40, #Check
 		'batch_size': 64, # Check, paper says 16 but code 64?
     },
     # Add more model configurations here...
@@ -178,8 +178,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        'dataset': 'ThingsEEG2',
-        'model': 'NiceEEG',
+        'dataset': 'EEGImageNet',
+        'model': 'ATMS',
     },
     # Add more combinations as desired...
 ]
