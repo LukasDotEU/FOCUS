@@ -295,11 +295,12 @@ class ATMS(BaseModel):
 
     def build_model(self, time_steps: int, num_electrodes: int, clip_centers_file: str, 
                     proj_dim: int = 1024, k: int = 40, m1:int = 25, m2:int = 51, s:int = 5, lr:float = 3e-4,
-                    **kwargs):
+                    d_model: int = 250, **kwargs):
         self.time_steps = time_steps
         self.num_electrodes = num_electrodes
+        self.d_model = d_model
 
-        self.encoder = iTransformer(self.time_steps, **kwargs)
+        self.encoder = iTransformer(time_steps=self.time_steps, d_model=self.d_model, **kwargs)
         
         # Same as NiceEEG
         self.enc_eeg = nn.Sequential(
@@ -311,7 +312,7 @@ class ATMS(BaseModel):
         # Same as NiceEEG  
         # calculate the embedding dimension of EEG after EEG encoder
         # k: number of filters, m1: kernel size, m2: pooling size, s: stride
-        eeg_embedding_dim = int(k * ((self.time_steps - m1 - m2 + 1)/s + 1))
+        eeg_embedding_dim = int(k * ((self.d_model - m1 - m2 + 1)/s + 1))
         self.proj_eeg = nn.Sequential(
             nn.Linear(eeg_embedding_dim, proj_dim),
             ResidualAdd(nn.Sequential(
