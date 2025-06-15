@@ -44,7 +44,7 @@ def process_dataset(ds, model, processor, device, override=False):
         project_dir = project_dir / 'image_set'
     print(f"Processing dataset '{dataset_name}' at {project_dir}")
 
-    output_path = project_dir / 'NICE_clip_center_features.npy'
+    output_path = project_dir / 'ATMS_clip_center_features.npy'
     # Check if the output file already exists to avoid reprocessing
     if output_path.exists() and not override:
         print(f"Found existing output for '{dataset_name}', skipping.")
@@ -61,7 +61,7 @@ def process_dataset(ds, model, processor, device, override=False):
         subfolders = [folder for folder in subfolders if folder in train_concepts]
         
     image_paths = []  # full Paths
-    class_ids  = []
+    class_ids   = []
 
     # for individual image feature saving
     class_labels = []
@@ -116,7 +116,7 @@ def process_dataset(ds, model, processor, device, override=False):
         if class_label not in feature_dict:
             feature_dict[class_label] = {}
         feature_dict[class_label][img_label] = feat_vec
-    individual_features_save_dir = project_dir / "NICE_clip_individual_features.pth"
+    individual_features_save_dir = project_dir / "ATMS_clip_individual_features.pth"
     torch.save(feature_dict, individual_features_save_dir)
     print(f"Saved individual features for dataset '{dataset_name}' at {individual_features_save_dir}")
 
@@ -160,9 +160,9 @@ def main():
     # Setup device and model
     print("Initializing CLIP model and processor...")
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = CLIPModel.from_pretrained('openai/clip-vit-large-patch14', cache_dir='.cache')
+    model = CLIPModel.from_pretrained('laion/CLIP-ViT-H-14-laion2B-s32B-b79K', cache_dir='.cache')
     model = torch.nn.DataParallel(model).to(device)
-    processor = CLIPImageProcessor.from_pretrained('openai/clip-vit-large-patch14', cache_dir='.cache')
+    processor = CLIPImageProcessor.from_pretrained('laion/CLIP-ViT-H-14-laion2B-s32B-b79K', cache_dir='.cache')
 
     processed = []
     for ds in DATASET_CONFIGS:

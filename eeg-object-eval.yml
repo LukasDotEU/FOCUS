@@ -19,3 +19,4 @@ dependencies:
       - pandas
       - scikit-learn
       - transformers
+      - open-clip-torch

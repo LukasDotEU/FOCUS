@@ -10,7 +10,6 @@ import torch.nn.init as init
 from torch import Tensor
 
 from einops.layers.torch import Rearrange
-from transformers import CLIPModel
 
 from models.model_base import BaseModel
 
@@ -80,11 +79,6 @@ class NiceEEG(BaseModel):
         self.time_steps = time_steps
         self.num_electrodes = num_electrodes
 
-        self.Enc_img = CLIPModel.from_pretrained("openai/clip-vit-large-patch14", cache_dir=".cache")
-        # disable grad on every CLIP parameter:
-        for p in self.Enc_img.parameters():
-            p.requires_grad = False
-
         self.Proj_img = nn.Sequential(
             nn.Linear(img_embedding_dim, proj_dim),
             ResidualAdd(nn.Sequential(
@@ -124,19 +118,13 @@ class NiceEEG(BaseModel):
         self.feature_centers = torch.from_numpy(feature_center_names['clip_center_features']).to(self.device)
 
     def forward(self, batch):
-        # TODO: check if right format...
         eeg = batch['eeg'].unsqueeze(1)  # [B, 1, C, T]
-        img_features = batch['image']    # [B, 3, H, W]
+        img_features = batch['image']    # [B, proj_dim]
         
         eeg_features = self.Enc_eeg(eeg)
         eeg_features = self.Proj_eeg(eeg_features)
         eeg_features = F.normalize(eeg_features, dim=-1)
 
-        # img_features = self.Enc_img(img).last_hidden_state[:,0,:]
-        # ensure encoder is in eval (dropout off, batchnorm stats frozen)
-        self.Enc_img.eval()
-        with torch.no_grad():
-            img_features = self.Enc_img.get_image_features(img_features)
         img_features = self.Proj_img(img_features)
         img_features = F.normalize(img_features, dim=-1)
 

@@ -1,13 +1,11 @@
 import os
 import pandas as pd
 import torch
-from PIL import Image
 
 from .base_dataset import BaseEEGDataset
 
 class EEGImageNet(BaseEEGDataset):
-    def __init__(self, eeg_root, images_root,
-                 use_images=False, preload_images=False, image_transform=None):
+    def __init__(self, eeg_root, images_root, use_images=False, images_file=None):
         """
         pth_file: path to the .pth containing:
           {
@@ -16,7 +14,7 @@ class EEGImageNet(BaseEEGDataset):
                 'eeg'    : Tensor [128, 500],
                 'image'  : int (image index),
                 'label'  : int (class index),
-                'subject': any (e.g. int)
+                'subject': int
               },
               ...
             ],
@@ -31,13 +29,9 @@ class EEGImageNet(BaseEEGDataset):
               ...
             class_label_1/
               ...
-        use_images: if False, __getitem__ returns {'image': None}
-        preload_images: if True, load all images into memory at init
-        image_transform: torchvision transforms to apply to PIL images
+        use_images: if False, __getitem__ returns no image
         """
-        super().__init__(eeg_root=eeg_root, images_root=images_root, 
-                         use_images=use_images, preload_images=preload_images, 
-                         image_transform=image_transform)
+        super().__init__(eeg_root=eeg_root, images_root=images_root, use_images=use_images, images_file=images_file)
 
         # 1) Load the .pth file
         data:dict = torch.load(self.eeg_root)
@@ -61,10 +55,8 @@ class EEGImageNet(BaseEEGDataset):
         self.metadata = pd.DataFrame(records)
 
         # 3) If use_images & preload_images, build an in-memory cache of all unique images
-        self._image_cache = {}
-        if self.use_images and self.preload_images:
-            for idx, class_idx, image_idx in zip(self.metadata['idx'], self.metadata['class_idx'], self.metadata['image_idx']):
-                self._image_cache[idx] = self._load_image(class_idx, image_idx)
+        if self.use_images:
+            self.images = torch.load(os.path.join(self.images_root, images_file), weights_only=False)
 
     def __len__(self):
         return len(self.metadata)
@@ -77,7 +69,7 @@ class EEGImageNet(BaseEEGDataset):
             'class_idx': int,
             'image_idx': int,
             'subject'  : int,
-            'image'    : Tensor [3, X (224), Y (224)] (if use_images=True, else not present)
+            'image'    : Tensor [feature_dimension] (if use_images=True, else not present)
           }
         """
         row = self.metadata.iloc[idx]  # Get the row for this index
@@ -88,16 +80,13 @@ class EEGImageNet(BaseEEGDataset):
         subject = row['subject']       # int
 
         if self.use_images:
-            if self.preload_images:
-                img_tensor = self._image_cache[idx]
-            else:
-                img_tensor = self._load_image(class_idx, image_idx)
+            img_feature = self.images[self.class_labels[class_idx]][self.image_labels[image_idx]]
             return {
                 'eeg': eeg,
                 'class_idx': class_idx,
                 'image_idx': image_idx,
                 'subject': subject,
-                'image': img_tensor
+                'image': torch.from_numpy(img_feature)
             }
         else:
             return {
@@ -106,17 +95,3 @@ class EEGImageNet(BaseEEGDataset):
                 'image_idx': image_idx,
                 'subject': subject
             }
-
-    def _load_image(self, class_idx, image_idx):
-        """
-        We load images_root/class_label/{image_label}.JPEG, apply transforms, and return a torch.Tensor.
-        """
-        filename = f"{self.image_labels[image_idx]}.JPEG"
-        img_path = os.path.join(self.images_root, self.class_labels[class_idx], filename)
-
-        with Image.open(img_path).convert('RGB') as img:
-            # processor returns a batch; grab the single sample
-            processed = self.processor(images=img, return_tensors="pt")
-            # pixel_values has shape (1, 3, H, W) → drop batch dim
-            pixel_values = processed.pixel_values.squeeze(0)
-            return pixel_values

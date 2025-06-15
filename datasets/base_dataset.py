@@ -1,6 +1,5 @@
 import pandas as pd
 from torch.utils.data import Dataset
-from torchvision import transforms
 
 class BaseEEGDataset(Dataset):
     """
@@ -21,21 +20,12 @@ class BaseEEGDataset(Dataset):
            'image'    : torch.Tensor or None (if images not used)
     """
 
-    def __init__(self, eeg_root: str, images_root: str, use_images: bool, preload_images: bool, image_transform: transforms):
+    def __init__(self, eeg_root: str, images_root: str, use_images: bool, images_file:str):
         super().__init__()
         self.eeg_root = eeg_root
         self.images_root = images_root
         self.use_images = use_images
-        self.preload_images = preload_images
-
-        if self.use_images:
-            from transformers import CLIPImageProcessor
-            # TODO: Make it depandant on the model used.
-            # Set up image transform (if none provided, use a default CLIP pipeline)
-            if image_transform is None:
-                self.processor = CLIPImageProcessor.from_pretrained("openai/clip-vit-large-patch14", cache_dir=".cache")
-            else:
-                self.processor = image_transform
+        self.images_file = images_file
 
         # Subclasses must create a DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx']
         self.metadata = pd.DataFrame(columns=['idx', 'subject', 'class_idx', 'image_idx'])
