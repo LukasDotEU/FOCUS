@@ -87,8 +87,8 @@ class BaseModel(nn.Module):
 
             # TODO: check order of zero_grad and forward
             self.optimizer.zero_grad()
-            logits = self.forward(batch)
-            loss = self.compute_loss(batch, logits)
+            output = self.forward(batch)
+            loss = self.compute_loss(batch, output)
             loss.backward()
             self.optimizer.step()
 
@@ -96,7 +96,7 @@ class BaseModel(nn.Module):
             n_batches += 1
 
             with torch.no_grad():
-                preds, scores = self.compute_predictions(logits)
+                preds, scores = self.compute_predictions(output)
 
             all_preds.append(preds)
             all_labels.append(batch['class_idx'])
