@@ -2,18 +2,11 @@ import os
 import numpy as np
 import pandas as pd
 import torch
-from PIL import Image
 
 from .base_dataset import BaseEEGDataset
 
 class ThingsEEG2(BaseEEGDataset):
-    def __init__(self,
-                 eeg_root: str,
-                 images_root: str,
-                 use_images: bool = False,
-                 preload_images: bool = False,
-                 image_transform=None,
-                 average_reps: bool = False):
+    def __init__(self, eeg_root, images_root, use_images = False, images_file = None, average_reps = False):
         """
         Adaptation for the ThingsEEG2 layout:
         - eeg_root/
@@ -31,11 +24,7 @@ class ThingsEEG2(BaseEEGDataset):
                     air_conditioner_02a.jpg
                 ...
         """
-        super().__init__(eeg_root=eeg_root,
-                         images_root=images_root,
-                         use_images=use_images,
-                         preload_images=preload_images,
-                         image_transform=image_transform)
+        super().__init__(eeg_root=eeg_root, images_root=images_root, use_images=use_images, images_file=images_file)
         
         self.average_reps = average_reps  # If True, average the 4 repetitions of each image
 
@@ -96,11 +85,9 @@ class ThingsEEG2(BaseEEGDataset):
             })
         self.metadata = pd.DataFrame(records)
 
-        # --- 4) (Optional) preload images into RAM -------------------------------
-        self._image_cache = {}
-        if self.use_images and self.preload_images:
-            for idx, class_idx, image_idx in zip(self.metadata['idx'], self.metadata['class_idx'], self.metadata['image_idx']):
-                self._image_cache[idx] = self._load_image(class_idx, image_idx)
+        # If use_images & preload_images, build an in-memory cache of all unique images
+        if self.use_images:
+            self.images = torch.load(os.path.join(self.images_root, "image_set", images_file), weights_only=False)
 
     def __len__(self):
         return len(self.metadata)
@@ -113,7 +100,7 @@ class ThingsEEG2(BaseEEGDataset):
             'class_idx': int,
             'image_idx': int,
             'subject'  : int,
-            'image'    : Tensor [3, X (224), Y (224)] (if use_images=True, else not present)
+            'image'    : Tensor [feature_dimension] (if use_images=True, else not present)
           }
         """
         row = self.metadata.iloc[idx]  # Get the row for this index
@@ -124,16 +111,13 @@ class ThingsEEG2(BaseEEGDataset):
         subject = row['subject']       # int
 
         if self.use_images:
-            if self.preload_images:
-                img_tensor = self._image_cache[idx]
-            else:
-                img_tensor = self._load_image(class_idx, image_idx)
+            img_feature = self.images[self.class_labels[class_idx]][self.image_labels[image_idx]]
             return {
                 'eeg': eeg,
                 'class_idx': class_idx,
                 'image_idx': image_idx,
                 'subject': subject,
-                'image': img_tensor
+                'image': torch.from_numpy(img_feature)
             }
         
         return {
@@ -142,17 +126,3 @@ class ThingsEEG2(BaseEEGDataset):
             'image_idx': image_idx,
             'subject': subject
         }
-
-    def _load_image(self, class_idx, image_idx):
-        """
-        We load images_root/image_set/class_label/{image_label}.jpg, apply transforms, and return a torch.Tensor.
-        """
-        filename = f"{self.image_labels[image_idx]}.jpg"
-        img_path = os.path.join(self.images_root, "image_set",self.class_labels[class_idx], filename)
-
-        with Image.open(img_path).convert('RGB') as img:
-            # processor returns a batch; grab the single sample
-            processed = self.processor(images=img, return_tensors="pt")
-            # pixel_values has shape (1, 3, H, W) → drop batch dim
-            pixel_values = processed.pixel_values.squeeze(0)
-            return pixel_values

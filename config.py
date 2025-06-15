@@ -22,10 +22,10 @@ DATASET_CONFIGS = [
 				'num_residual_blocks': 4
             },
 			'NiceEEG': {
-				'clip_centers_file': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/clip_center_features.npy',
+				'clip_centers_file': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/NICE_clip_center_features.npy',
             },
 			'ATMS': {
-				'clip_centers_file': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/clip_center_features_ATMS-tests.npy',
+				'clip_centers_file': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_center_features.npy',
             },
         },
     },
@@ -45,10 +45,10 @@ DATASET_CONFIGS = [
 				'num_residual_blocks': 3
             },
 			'NiceEEG': {
-				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy',
             },
 			'ATMS': {
-				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features_ATMS-tests.npy',
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy',
             },
         },
     },
@@ -68,10 +68,10 @@ DATASET_CONFIGS = [
 				'num_residual_blocks': 3
             },
 			'NiceEEG': {
-				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features.npy',
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy',
             },
 			'ATMS': {
-				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/clip_center_features_ATMS-tests.npy',
+				'clip_centers_file': '../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy',
             },
         },
     },
@@ -140,6 +140,9 @@ MODEL_CONFIGS = [
         },
 		'pretraining': False,
 		'use_images': True,
+		'dataset_args': {
+			'clip_indiviual_feature_file': 'NICE_clip_individual_features.pth'
+        },
 		'epochs': 200,
 		'batch_size': 256 #?
     },
@@ -162,6 +165,9 @@ MODEL_CONFIGS = [
         },
 		'pretraining': False,
 		'use_images': True,
+		'dataset_args': {
+			'clip_indiviual_feature_file': 'ATMS_clip_individual_features.pth'
+        },
 		'epochs': 40,
 		'batch_size': 64, # Check, paper says 16 but code 64?
     },
@@ -173,7 +179,7 @@ MODEL_CONFIGS = [
 SELECTED_CONFIGS = [
     {
         'dataset': 'ThingsEEG2',
-        'model': 'ATMS',
+        'model': 'NiceEEG',
     },
     # Add more combinations as desired...
 ]

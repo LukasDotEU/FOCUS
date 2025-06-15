@@ -11,7 +11,6 @@ import torch.nn.functional as F
 from einops.layers.torch import Rearrange
 import numpy as np
 from open_clip.loss import ClipLoss
-from transformers import CLIPModel
 
 from models.model_base import BaseModel
 
@@ -300,11 +299,6 @@ class ATMS(BaseModel):
         self.time_steps = time_steps
         self.num_electrodes = num_electrodes
 
-        self.Enc_img = CLIPModel.from_pretrained("laion/CLIP-ViT-H-14-laion2B-s32B-b79K", cache_dir=".cache")
-        # disable grad on every CLIP parameter:
-        for p in self.Enc_img.parameters():
-            p.requires_grad = False
-
         self.encoder = iTransformer(self.time_steps, **kwargs)
         
         # Same as NiceEEG
@@ -338,13 +332,8 @@ class ATMS(BaseModel):
          
     def forward(self, batch):
         eeg = batch['eeg'] # [B, C, T]
-        imgs = batch['image'] # [B, 3, H, W]
+        img_features = batch['image'] # [B, proj_dim]
         subject_ids = batch['subject']
-
-        # ensure encoder is in eval (dropout off, batchnorm stats frozen)
-        self.Enc_img.eval()
-        with torch.no_grad():
-            img_features = self.Enc_img.get_image_features(imgs)
 
         eeg_features = self.encoder(eeg, subject_ids)
         eeg_embedding = self.enc_eeg(eeg_features)

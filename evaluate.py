@@ -26,7 +26,7 @@ def set_seed(seed=42):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-def train_and_evaluate(dataset_conf, model_conf):
+def train_and_evaluate(dataset_conf:dict, model_conf:dict):
     """
     Workflow per (dataset, model):
       1) Load entire dataset → get outer_train_idx, outer_test_idx (per-subject, all-subjects, or LOSO).
@@ -42,11 +42,14 @@ def train_and_evaluate(dataset_conf, model_conf):
 
     # 1) Instantiate the full dataset
     DSClass = dataset_conf['class']
+    dataset_args = model_conf.get('dataset_args', None)
+    images_file = (dataset_args.get('clip_indiviual_feature_file', None) if dataset_args is not None else None)
     if 'args' in dataset_conf:
-        full_dataset = DSClass(
+        full_dataset: BaseEEGDataset = DSClass(
             eeg_root=dataset_conf['eeg_root'],
             images_root=dataset_conf['images_root'],
             use_images=model_conf['use_images'],
+            images_file=images_file,
             **dataset_conf['args'],
         )
     else:
@@ -54,6 +57,7 @@ def train_and_evaluate(dataset_conf, model_conf):
             eeg_root=dataset_conf['eeg_root'],
             images_root=dataset_conf['images_root'],
             use_images=model_conf['use_images'],
+            images_file=images_file,
         )
 
     # Build outer splits

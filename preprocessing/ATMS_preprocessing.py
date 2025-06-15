@@ -23,18 +23,17 @@ from config import DATASET_CONFIGS
 
 class GlobalImageDataset(Dataset):
     """
-    Dataset over all images, returning (PIL_image, folder_id).
+    Dataset over all images, returning PIL_image.
     """
-    def __init__(self, image_paths, folder_ids):
+    def __init__(self, image_paths):
         self.image_paths = image_paths
-        self.folder_ids = folder_ids
 
     def __len__(self):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
         img = Image.open(self.image_paths[idx]).convert('RGB')
-        return img, self.folder_ids[idx]
+        return img
 
 def process_dataset(ds, model, processor, device, override=False):
 
@@ -45,7 +44,7 @@ def process_dataset(ds, model, processor, device, override=False):
         project_dir = project_dir / 'image_set'
     print(f"Processing dataset '{dataset_name}' at {project_dir}")
 
-    output_path = project_dir / 'clip_center_features_ATMS-tests.npy'
+    output_path = project_dir / 'ATMS_clip_center_features.npy'
     # Check if the output file already exists to avoid reprocessing
     if output_path.exists() and not override:
         print(f"Found existing output for '{dataset_name}', skipping.")
@@ -62,7 +61,11 @@ def process_dataset(ds, model, processor, device, override=False):
         subfolders = [folder for folder in subfolders if folder in train_concepts]
         
     image_paths = []  # full Paths
-    folder_ids   = []
+    class_ids   = []
+
+    # for individual image feature saving
+    class_labels = []
+    image_labels = []
 
     for condition_id, folder in enumerate(subfolders):
         folder_path = project_dir / folder
@@ -70,41 +73,52 @@ def process_dataset(ds, model, processor, device, override=False):
                       if entry.is_file() and entry.name.lower().endswith(('.jpg', '.jpeg'))]
         for fname in file_names:
             image_paths.append(str(folder_path / fname))
-            folder_ids.append(condition_id)
+            class_ids.append(condition_id)
+
+            # for individual image feature saving
+            class_labels.append(folder)
+            image_labels.append(fname.split('.',1)[0])
 
     total_imgs = len(image_paths)
     num_classes = len(subfolders)
     print(f"Found {total_imgs} images across {num_classes} folders.")
 
-    # custom collate: batch of (PIL images, ids) → (list_of_PILs, tensor(ids))
+    # custom collate: batch of PIL images → list_of_PILs
     def collate_fn(batch):
-        imgs, ids = zip(*batch)
-        return list(imgs), torch.tensor(ids, dtype=torch.long)
+        return list(batch)
 
     # Create global DataLoader
-    dataset = GlobalImageDataset(image_paths, folder_ids)
+    dataset = GlobalImageDataset(image_paths)
     loader  = DataLoader(dataset,
                          batch_size=64,
                          num_workers=4,
                          pin_memory=True,
                          collate_fn=collate_fn)
     
-    # Prepare storage for features and folder_ids
+    # Prepare storage for features
     all_feats = []  # list of CPU tensors
-    all_ids   = []  # list of lists
 
     total_batches = len(loader)
     # Single pass over all images
-    for i, (imgs, ids) in enumerate(loader):
+    for i, (imgs) in enumerate(loader):
         print(f"[{dataset_name}] Processing batch {i+1}/{total_batches} ({len(imgs)} images)")
         batch = processor(images=imgs, return_tensors='pt').pixel_values.to(device, non_blocking=True)
         with torch.no_grad():
             feats = model.module.get_image_features(batch)
         all_feats.append(feats.cpu())
-        all_ids.append(ids)
     
     feats_tensor = torch.cat(all_feats, dim=0)  # [total_imgs, dim]
-    ids_tensor   = torch.cat(all_ids, dim=0)   # [total_imgs]
+    ids_tensor   = torch.tensor(class_ids)      # [total_imgs]
+
+    # Build the nested dict:
+    feature_dict = {}
+    for feat_vec, class_label, img_label in zip(feats_tensor.numpy(), class_labels, image_labels):
+        if class_label not in feature_dict:
+            feature_dict[class_label] = {}
+        feature_dict[class_label][img_label] = feat_vec
+    individual_features_save_dir = project_dir / "ATMS_clip_individual_features.pth"
+    torch.save(feature_dict, individual_features_save_dir)
+    print(f"Saved individual features for dataset '{dataset_name}' at {individual_features_save_dir}")
 
     # Compute center features per folder
     dim = feats_tensor.size(1)
