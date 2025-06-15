@@ -5,6 +5,7 @@ import pandas as pd
 from torch.utils.data import DataLoader, Subset
 
 # Import base model class
+from datasets.base_dataset import BaseEEGDataset
 from models.model_base import BaseModel
 
 # Import utilities
@@ -49,7 +50,7 @@ def train_and_evaluate(dataset_conf, model_conf):
             **dataset_conf['args'],
         )
     else:
-        full_dataset = DSClass(
+        full_dataset: BaseEEGDataset = DSClass(
             eeg_root=dataset_conf['eeg_root'],
             images_root=dataset_conf['images_root'],
             use_images=model_conf['use_images'],
@@ -70,7 +71,7 @@ def train_and_evaluate(dataset_conf, model_conf):
 
     # 3) Loop through each outer split, carve out a single <train/val> and then do final test
     for split in all_outer_splits:
-        split_name = split['name']
+        split_name:str = split['name']
         outer_train_idx = split['train_idx']
         outer_test_idx = split['test_idx']
 
@@ -103,10 +104,24 @@ def train_and_evaluate(dataset_conf, model_conf):
 
         # 2b) Instantiate fresh model
         ModelClass = model_conf['class']
+        model_name = model_conf['name']
         model_args = model_conf['args'].copy()
+
+        # Give ATMS model info about number of subjects it's being trained with for subject specific logic
+        if model_name == "ATMS":
+            if split_name.startswith("per_subject"):
+                num_subjects = 1
+            elif split_name.startswith("cross_subject"):
+                num_subjects = len(np.unique(full_dataset.metadata['subject'])) - 2
+            elif split_name.startswith("all_subjects"):
+                num_subjects = len(np.unique(full_dataset.metadata['subject']))
+            else:
+                Exception("Splitname not known.")
+            model_args['num_subjects'] = num_subjects
+
         model: BaseModel = ModelClass(device=DEVICE, **model_args)
         total_params, trainable_params = model.count_params()
-        print(f"[{split_name}] Initialized model '{model_conf['name']}' with '{ds_conf['name']}'")
+        print(f"[{split_name}] Initialized model '{model_name}' with '{ds_conf['name']}'")
         print(f"[{split_name}] total_params={total_params}, trainable_params={trainable_params}")
 
         # 2c) Training loop (track best-F1 on validation)

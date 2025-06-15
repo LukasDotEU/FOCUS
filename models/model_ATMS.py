@@ -1,9 +1,6 @@
 # model taken from: https://github.com/ncclab-sustech/EEG_Image_decode (Only Change: removal of Horovod package)
 # Changes done:
-# Removed never used code: Subject depandant layers, Masking in Transformer, different Embeddings
-# ---> ALTOUGH Postional Embedding is mentioned in paper but was never actually used...
-# .... TODO: Mention in paper/thesis
-# Changed custom implemented transformer to use native Transformer
+# Removed never used code: Masking in Transformer, different Embeddings
 # Changed to use OpenClips ClipLoss (as it was basically identical)
 
 import os
@@ -125,27 +122,36 @@ class SubjectEmbedding(nn.Module):
             return self.subject_embedding(subject_ids).unsqueeze(1)
     
 class DataEmbedding(nn.Module):
-    def __init__(self, time_steps, d_model, dropout=0.1, num_subjects=None):
+    def __init__(self, time_steps, d_model, num_subjects, dropout=0.1):
         super().__init__()
-
-        # TODO: Check if want to bring back as this was only used when not joint trained 
-        self.value_embedding = nn.Linear(time_steps, d_model)  # 如果没有指定subjects，则使用单一的value embedding
+        # Optimisation for forward to allow batch processing when only one linear layer
+        self.num_subjects = num_subjects
+        if self.num_subjects == 1:
+            self.value_embedding = nn.ModuleDict({
+                str(sub): nn.Linear(time_steps, d_model) for sub in range(self.num_subjects)
+            })
+        else:
+            self.value_embedding = nn.Linear(time_steps, d_model)  # 如果没有指定subjects，则使用单一的value embedding
 
         self.dropout = nn.Dropout(p=dropout)
-        self.subject_embedding = SubjectEmbedding(num_subjects, d_model) if num_subjects is not None else None
+        self.subject_embedding = SubjectEmbedding(self.num_subjects, d_model)
         
-    def forward(self, x, subject_ids=None):
-        x = self.value_embedding(x)
+    def forward(self, x, subject_ids):
+        # TODO: .item() call necessary?
+        if self.num_subjects == 1:
+            x = torch.stack([self.value_embedding[str(subject_id.item())](x[i]) for i, subject_id in enumerate(subject_ids)])
+        else:
+            x = self.value_embedding(x)
 
-        if self.subject_embedding is not None:
-            subject_emb = self.subject_embedding(subject_ids)  # (batch_size, 1, d_model)
-            x = torch.cat([subject_emb, x], dim=1)  # 在序列维度上拼接 (batch_size, seq_len + 1, d_model)
+        subject_emb = self.subject_embedding(subject_ids)  # (batch_size, 1, d_model)
+        x = torch.cat([subject_emb, x], dim=1)  # 在序列维度上拼接 (batch_size, seq_len + 1, d_model)
 
         return self.dropout(x)
     
     
 # -------------- from ATMS_retrieval.py
-# TODO: Add num_subjects into config file... (dependant on evaluations split type...)
+# iTransformer is from a paper about inversed Transformer. Git rep exists for that.
+# There is also a OpenSource Recreation (with improvements?) that is available via pip.
 class iTransformer(nn.Module):
     def __init__(self, time_steps: int = 250, d_model: int = 250, dropout: float = 0.25, 
                  n_heads: int = 4, e_layers: int = 1, d_ff: int = 256, 
@@ -192,7 +198,7 @@ class iTransformer(nn.Module):
             norm_layer=torch.nn.LayerNorm(d_model)
         )
 
-    def forward(self, x_enc: Tensor, subject_ids=None) -> Tensor:
+    def forward(self, x_enc: Tensor, subject_ids) -> Tensor:
         enc_out = self.enc_embedding(x_enc, subject_ids)
         # mask or src_key_padding_mask can be passed here if needed
         enc_out = self.encoder(enc_out)  # returns (B, seq_len+1, d_model)
@@ -296,13 +302,13 @@ class ATMS(BaseModel):
          
     def forward(self, batch):
         eeg = batch['eeg'] # [B, C, T]
-        img_features = batch['image'] # [B, 3, H, W]
+        imgs = batch['image'] # [B, 3, H, W]
         subject_ids = batch['subject']
 
         # ensure encoder is in eval (dropout off, batchnorm stats frozen)
         self.Enc_img.eval()
         with torch.no_grad():
-            img_features = self.Enc_img.get_image_features(img_features)
+            img_features = self.Enc_img.get_image_features(imgs)
 
         eeg_features = self.encoder(eeg, subject_ids)
         eeg_embedding = self.enc_eeg(eeg_features)
