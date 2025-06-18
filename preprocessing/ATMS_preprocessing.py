@@ -70,7 +70,7 @@ def process_dataset(ds, model, processor, device, override=False):
     for condition_id, folder in enumerate(subfolders):
         folder_path = project_dir / folder
         file_names = [entry.name for entry in os.scandir(folder_path) 
-                      if entry.is_file() and entry.name.lower().endswith(('.jpg', '.jpeg'))]
+                      if entry.is_file() and entry.name.lower().endswith(('.jpg', '.jpeg', '.png'))]
         for fname in file_names:
             image_paths.append(str(folder_path / fname))
             class_ids.append(condition_id)
