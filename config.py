@@ -76,7 +76,7 @@ DATASET_CONFIGS = [
             },
         },
     },
-    {
+    { # 51840 trials
         'name': 'Kaneshiro',
         'class': Kaneshiro,
         'eeg_root': '../Datasets/Kaneshiro/',
@@ -99,7 +99,7 @@ DATASET_CONFIGS = [
             },
         },
     },
-    {
+    { # 51857 trials
         'name': 'KaneshiroOriginal', # Can't use NiceEEG or ATMS on this one as time_steps not big enough for their convolution
         'class': Kaneshiro,
         'eeg_root': '../Datasets/Kaneshiro/',
@@ -173,7 +173,7 @@ MODEL_CONFIGS = [
         'epochs': 100,
         'batch_size': 16
     },
-	# KaneshiroOriginal: NaN; Kaneshiro: 4648 -> 768; EEGImageNet: 2960 -> 768; ThingsEEG2: 1440 -> 768 (Original)
+	# KaneshiroOriginal: NaN; Kaneshiro: 4640 -> 768; EEGImageNet: 2960 -> 768; ThingsEEG2: 1440 -> 768 (Original)
 	{
 		'name': 'NiceEEG',
 		'class': NiceEEG,
@@ -206,7 +206,7 @@ MODEL_CONFIGS = [
 			'm2': 51,
 			's': 5,
 			'lr': 3e-4,
-            'd_model': 250,
+            'd_model': 250, # TODO: should this be changed to model specific?
             'dropout': 0.25,
             'n_heads': 4,
             'e_layers': 1,
@@ -229,7 +229,7 @@ MODEL_CONFIGS = [
 SELECTED_CONFIGS = [
     {
         'dataset': 'Kaneshiro',
-        'model': 'NiceEEG',
+        'model': 'EEGNet',
     },
     # Add more combinations as desired...
 ]
