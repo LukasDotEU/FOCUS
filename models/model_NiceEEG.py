@@ -2,6 +2,7 @@
 
 import os
 import numpy as np
+from math import floor
 
 import torch
 import torch.nn as nn
@@ -95,7 +96,7 @@ class NiceEEG(BaseModel):
 
         # calculate the embedding dimension of EEG after EEG encoder
         # k: number of filters, m1: kernel size, m2: pooling size, s: stride
-        eeg_embedding_dim = int(k * ((self.time_steps - m1 - m2 + 1)/s + 1))
+        eeg_embedding_dim = int(k * floor(( (self.time_steps - m1 + 1) - m2 ) / s + 1))
         self.Proj_eeg = nn.Sequential(
             nn.Linear(eeg_embedding_dim, proj_dim),
             ResidualAdd(nn.Sequential(

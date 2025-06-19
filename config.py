@@ -1,4 +1,5 @@
 from datasets.eegImageNet_dataset import EEGImageNet
+from datasets.kaneshiro_dataset import Kaneshiro
 from datasets.thingsEEG2_dataset import ThingsEEG2
 from models.model_ATMS import ATMS
 from models.model_EEGNet import EEGNet
@@ -12,11 +13,14 @@ DATASET_CONFIGS = [
     {
         'name': 'EEGImageNet',
         'class': EEGImageNet,
-        'eeg_root': '../Datasets/EEGImageNet/eeg_55_95_std.pth',
+        'eeg_root': '../Datasets/EEGImageNet/',
         'images_root': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/',
         'time_steps': 440,
         'num_electrodes': 128,
         'num_classes': 40,
+        'args': {
+			'pth_file': 'eeg_55_95_std.pth',
+        },
 		'model_args': {
 			'EEGChannelNet': {
 				'num_residual_blocks': 4
@@ -75,12 +79,58 @@ DATASET_CONFIGS = [
             },
         },
     },
+    { # 51840 trials
+        'name': 'Kaneshiro',
+        'class': Kaneshiro,
+        'eeg_root': '../Datasets/Kaneshiro/',
+        'images_root': '../Datasets/Kaneshiro/Kaneshiro_images/',
+        'time_steps': 651,
+        'num_electrodes': 124,
+        'num_classes': 6,
+        'args': {
+			'use_original': False,
+        },
+		'model_args': {
+			'EEGChannelNet': {
+				'num_residual_blocks': 3
+            },
+			'NiceEEG': {
+				'clip_centers_file': '../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy',
+            },
+			'ATMS': {
+				'clip_centers_file': '../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy',
+            },
+        },
+    },
+    { # 51857 trials
+        'name': 'KaneshiroOriginal', # Can't use NiceEEG or ATMS on this one as time_steps not big enough for their convolution
+        'class': Kaneshiro,
+        'eeg_root': '../Datasets/Kaneshiro/',
+        'images_root': '../Datasets/Kaneshiro/Kaneshiro_images/',
+        'time_steps': 32,
+        'num_electrodes': 124,
+        'num_classes': 6,
+        'args': {
+			'use_original': True,
+        },
+		'model_args': {
+			'EEGChannelNet': {
+				'num_residual_blocks': 2
+            },
+			'NiceEEG': {
+				'clip_centers_file': '../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy',
+            },
+			'ATMS': {
+				'clip_centers_file': '../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy',
+            },
+        },
+    },
     # Add more dataset configurations here...
 ]
 
 # All available model configurations.
 MODEL_CONFIGS = [
-	# EEGImageNet: 208 -> 40; ThingsEEG2: 624 -> 1654
+	# KaneshiroOriginal: 16 -> 6; Kaneshiro: 320 -> 6;EEGImageNet: 208 -> 40; ThingsEEG2: 624 -> 1654
     {
         'name': 'EEGNet',
         'class': EEGNet,
@@ -98,7 +148,10 @@ MODEL_CONFIGS = [
         'epochs': 100,
         'batch_size': 64
     },
-	# EEGImageNet: 500 -> 1000 -> 40, ThingsEEG2: 600 -> 1000 -> 1654
+	# KaneshiroOriginal (2 residual blocks): 600 -> 1000 -> 6
+    # Kaneshiro (3 residual blocks): 7400 -> 1000 -> 6 TODO: Change and recheck as probably overfitting...
+	# EEGImageNet (4 residual blocks): 500 -> 1000 -> 40 (Original)
+    # ThingsEEG2 (3 residual blocks): 600 -> 1000 -> 1654
     {
         'name': 'EEGChannelNet',
         'class': EEGChannelNet,
@@ -123,7 +176,7 @@ MODEL_CONFIGS = [
         'epochs': 100,
         'batch_size': 16
     },
-	# EEGImageNet: 2960 -> 768, ThingsEEG2: 1440 -> 768
+	# KaneshiroOriginal: NaN; Kaneshiro: 4640 -> 768; EEGImageNet: 2960 -> 768; ThingsEEG2: 1440 -> 768 (Original)
 	{
 		'name': 'NiceEEG',
 		'class': NiceEEG,
@@ -156,7 +209,7 @@ MODEL_CONFIGS = [
 			'm2': 51,
 			's': 5,
 			'lr': 3e-4,
-            'd_model': 250,
+            'd_model': 250, # TODO: should this be changed to model specific?
             'dropout': 0.25,
             'n_heads': 4,
             'e_layers': 1,
@@ -178,8 +231,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        'dataset': 'EEGImageNet',
-        'model': 'ATMS',
+        'dataset': 'Kaneshiro',
+        'model': 'EEGNet',
     },
     # Add more combinations as desired...
 ]
