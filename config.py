@@ -13,11 +13,14 @@ DATASET_CONFIGS = [
     {
         'name': 'EEGImageNet',
         'class': EEGImageNet,
-        'eeg_root': '../Datasets/EEGImageNet/eeg_55_95_std.pth',
+        'eeg_root': '../Datasets/EEGImageNet/',
         'images_root': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/',
         'time_steps': 440,
         'num_electrodes': 128,
         'num_classes': 40,
+        'args': {
+			'pth_file': 'eeg_55_95_std.pth',
+        },
 		'model_args': {
 			'EEGChannelNet': {
 				'num_residual_blocks': 4
