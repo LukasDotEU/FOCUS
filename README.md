@@ -19,10 +19,11 @@ This repository implements several methods for evaluating EEG signals in combina
 ### Directories
 
 - **datasets/**  
-  Contains implementations for dataset loading:
+  Contains implementations for dataset precomputing/preprocessing and loading:
   - [`base_dataset.py`](datasets/base_dataset.py): Defines the abstract base class for EEG/Image datasets.
   - [`eegImageNet_dataset.py`](datasets/eegImageNet_dataset.py): Implements the EEGImageNet dataset.
   - [`thingsEEG2_dataset.py`](datasets/thingsEEG2_dataset.py): Implements the ThingsEEG2 dataset.
+  - [`kaneshiro_dataset.py`](datasets/kaneshiro_dataset.py): Implements the Kaneshiro dataset.
 
 - **models/**  
   Contains implementations of various neural network models:
@@ -30,10 +31,12 @@ This repository implements several methods for evaluating EEG signals in combina
   - [`model_EEGChannelNet.py`](models/model_EEGChannelNet.py): EEGChannelNet model for EEG classification.
   - [`model_EEGNet.py`](models/model_EEGNet.py): EEGNet implementation adapted from torcheeg.
   - [`model_NiceEEG.py`](models/model_NiceEEG.py): NICE-EEG model adapted from the NICE-EEG repository.
+  - [`model_ATMS.py`](models/model_ATMS.py): **[EXPERIMENTAL]** ATMS model adapted from the ATMS repository. 
 
-- **preprocessing/**  
-  Contains preprocessing scripts:
-  - [`NiceEEG_preprocessing.py`](preprocessing/NiceEEG_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features.
+- **feature_preprocessing/**  
+  Contains feature preprocessing scripts:
+  - [`NiceEEG_preprocessing.py`](feature_preprocessing/NiceEEG_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features and individual features.
+  - [`ATMS_preprocessing.py`](feature_preprocessing/ATMS_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features and individual features. [NEEDS TO BE UPDATED TO USE CLASS LABEL]
 
 - **utils/**  
   Contains utility modules for metrics, data splits, and timing:
@@ -88,6 +91,17 @@ Two sources are available for the ImageNet images corresponding to each of the 4
 
 - Repository & Data: [ThingsEEG2 on OSF](https://osf.io/3jk45/)
 
+### Kaneshiro
+
+**EEG Data**
+
+- Original-Version: [Original Version](https://purl.stanford.edu/bq914sc3730)
+- Updated-Version: [Object Category EEG Dataset (OCED)](https://exhibits.stanford.edu/data/catalog/tc919dd5388)
+
+**Image Stimuli**
+
+The image stimuli are only available in the updated version embedded in a [pdf file](https://stacks.stanford.edu/file/tc919dd5388/Stimulus%20table.pdf)
+
 ## Running the Framework
 
 ### Training and Evaluation
@@ -101,20 +115,26 @@ python evaluate.py
 This script will:
 - Load the EEG datasets (for example, EEGImageNet).
 - Generate various train/validation/test splits using [`SplitGenerator`](utils/splitGenerator.py).
-- Train models (e.g., [`EEGNet`](models/model_EEGNet.py), [`EEGChannelNet`](models/model_EEGChannelNet.py), [`NiceEEG`](models/model_NiceEEG.py)) with specified hyperparameters.
+- Train models (e.g., [`EEGNet`](models/model_EEGNet.py), [`EEGChannelNet`](models/model_EEGChannelNet.py), [`NiceEEG`](models/model_NiceEEG.py), ...) with specified hyperparameters.
 - Compute and log metrics using [`Evaluator`](utils/metrics.py) and time each phase with [`Timer`](utils/timers.py).
 - Save results to `evaluation_summary.csv`.
 
 
 ## Preprocessing
 
-To extract image features (center features per class) for datasets using CLIP, run the preprocessing script:
+To extract individual dataset trials run the repective dataset file:
 
 ```sh
-python preprocessing/NiceEEG_preprocessing.py
+python datasets/eegImageNet_dataset.py
 ```
 
-> **Note**: Make sure to run this script from the project root directory due to relative path dependencies.
+To extract features, run one of the feature preprocessing script:
+
+```sh
+python feature_preprocessing/NiceEEG_preprocessing.py
+```
+
+> **Note**: Make sure to run the scripts from the project root directory due to relative path dependencies.
 
 ## Contributing
 
