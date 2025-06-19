@@ -36,7 +36,7 @@ This repository implements several methods for evaluating EEG signals in combina
 - **feature_preprocessing/**  
   Contains feature preprocessing scripts:
   - [`NiceEEG_preprocessing.py`](feature_preprocessing/NiceEEG_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features and individual features.
-  - [`ATMS_preprocessing.py`](feature_preprocessing/ATMS_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features and individual features. [NEEDS TO BE UPDATED TO USE CLASS LABEL]
+  - [`ATMS_preprocessing.py`](feature_preprocessing/ATMS_preprocessing.py): Extracts CLIP features for images, CLIP features for labels and saves them.
 
 - **utils/**  
   Contains utility modules for metrics, data splits, and timing:
