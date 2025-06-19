@@ -3,6 +3,7 @@
 # Removed never used code: Masking in Transformer, different Embeddings
 # Changed to use OpenClips ClipLoss (as it was basically identical)
 
+from math import floor
 import os
 import torch
 import torch.nn as nn
@@ -312,7 +313,7 @@ class ATMS(BaseModel):
         # Same as NiceEEG  
         # calculate the embedding dimension of EEG after EEG encoder
         # k: number of filters, m1: kernel size, m2: pooling size, s: stride
-        eeg_embedding_dim = int(k * ((self.d_model - m1 - m2 + 1)/s + 1))
+        eeg_embedding_dim = int(k * floor(( (self.d_model - m1 + 1) - m2 ) / s + 1))
         self.proj_eeg = nn.Sequential(
             nn.Linear(eeg_embedding_dim, proj_dim),
             ResidualAdd(nn.Sequential(
