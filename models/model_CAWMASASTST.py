@@ -253,7 +253,7 @@ class CAW_MASA_STST(nn.Module):
             nn.Softmax(dim=1),
         )
     def forward(self, x, xcwt):
-        xcwt,_=self.caw(xcwt)
+        x, _ = self.caw(x)
         #MASA
         xcwts=xcwt.chunk(self.chunks,dim=2)
         out1s=[]
