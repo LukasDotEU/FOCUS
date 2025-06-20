@@ -49,6 +49,7 @@ def train_and_evaluate(dataset_conf:dict, model_conf:dict):
             eeg_root=dataset_conf['eeg_root'],
             images_root=dataset_conf['images_root'],
             use_images=model_conf['use_images'],
+            use_cwt=model_conf['use_cwt'],
             images_file=images_file,
             **dataset_conf['args'],
         )
@@ -57,6 +58,7 @@ def train_and_evaluate(dataset_conf:dict, model_conf:dict):
             eeg_root=dataset_conf['eeg_root'],
             images_root=dataset_conf['images_root'],
             use_images=model_conf['use_images'],
+            use_cwt=model_conf['use_cwt'],
             images_file=images_file,
         )
 

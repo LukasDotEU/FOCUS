@@ -7,6 +7,7 @@ class BaseEEGDataset(Dataset):
     Holds a pandas DataFrame `self.metadata` with columns:
       - 'idx'       (int): index of sample in the dataset array
       - 'subject'   (int): subject identifier
+      - 'filepath'  (str): filename of EEG trial,
       - 'class_idx' (int): class idx
       - 'image_idx' (int): image idx
 
@@ -18,17 +19,19 @@ class BaseEEGDataset(Dataset):
            'image_idx': int
            'subject'  : int
            'image'    : torch.Tensor or None (if images not used)
+           'cwt'      : torch.Tensor or None (if cwt not used)
     """
 
-    def __init__(self, eeg_root: str, images_root: str, use_images: bool, images_file:str):
+    def __init__(self, eeg_root: str, images_root: str, use_images: bool, images_file:str, use_cwt: bool):
         super().__init__()
         self.eeg_root = eeg_root
         self.images_root = images_root
         self.use_images = use_images
         self.images_file = images_file
+        self.use_cwt = use_cwt
 
-        # Subclasses must create a DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx']
-        self.metadata = pd.DataFrame(columns=['idx', 'subject', 'class_idx', 'image_idx'])
+        # Subclasses must create a DataFrame with columns ['idx', 'subject', 'filepath', 'class_idx', 'image_idx']
+        self.metadata = pd.DataFrame(columns=['idx', 'subject', 'filepath', 'class_idx', 'image_idx'])
 
     def __len__(self):
         return len(self.metadata)

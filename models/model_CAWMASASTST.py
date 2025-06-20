@@ -1,6 +1,8 @@
 # model taken from https://github.com/ljbuaa/VisualDecoding
 # could have also taken a different model from: https://github.com/JeniferK28/Learning-Spatiotemporal-Graph-Representations-for-Visual-Perception-using-EEG-Signals but would have needed to have functionality connectivity matrix
 
+# Also thanks to this fork!: https://github.com/busiqiao/CAW-MASA-STST
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,25 +10,15 @@ from torch import Tensor
 from einops import rearrange
 from einops.layers.torch import Rearrange
 
-class ConvBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size,with_bn=True,with_relu=True,stride=1,padding=0,bias=True):
-        super().__init__()
-        self.with_bn=with_bn
-        self.with_relu=with_relu
-        self.conv2d = nn.Conv2d(in_channels, out_channels, kernel_size,stride=stride,padding=padding,bias=bias)
-        self.batchNorm=None
-        self.relu=None
-        if with_bn:
-            self.batchNorm=nn.BatchNorm2d(out_channels)
-        if with_relu:
-            self.relu=nn.ELU()
-    def forward(self, x):
-        out=self.conv2d(x)
-        if self.with_bn:
-            out=self.batchNorm(out)
-        if self.with_relu:
-            out=self.relu(out)
-        return out
+from models.model_base import BaseModel
+
+class ConvBlock(nn.Sequential):
+    def __init__(self, in_channels, out_channels, kernel_size):
+        super().__init__(
+            nn.Conv2d(in_channels, out_channels, kernel_size),
+            nn.BatchNorm2d(out_channels),
+            nn.ELU(),
+        )
 
 class GCN(nn.Module):
     def __init__(self, chns,feas):
@@ -55,7 +47,8 @@ class GCN(nn.Module):
         L_t = (2 * L) / lambda_max - firstOrder
         cheb_polynomials = [firstOrder, L_t]
         for i in range(2, self.k):
-            cheb_polynomials.append(2 * L_t * cheb_polynomials[i - 1] - cheb_polynomials[i - 2])
+            cheb_polynomials.append(2 * torch.matmul(L_t, cheb_polynomials[i - 1]) - cheb_polynomials[i - 2])
+            # cheb_polynomials.append(2 * L_t * cheb_polynomials[i - 1] - cheb_polynomials[i - 2]) Chebyshev recurrence requires matrix multiplication?
         output = torch.zeros(b, c, self.num_of_filters).cuda()
         for kk in range(self.k):
             T_k = cheb_polynomials[kk].expand([b,c,c])
@@ -75,14 +68,11 @@ class MultiHeadAttention(nn.Module):
         self.att_drop = nn.Dropout(dropout)
         self.projection = nn.Linear(emb_size, emb_size)
 
-    def forward(self, x: Tensor, mask: Tensor = None) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         queries = rearrange(self.queries(x), "b n (h d) -> b h n d", h=self.num_heads)
         keys = rearrange(self.keys(x), "b n (h d) -> b h n d", h=self.num_heads)
         values = rearrange(self.values(x), "b n (h d) -> b h n d", h=self.num_heads)
         energy = torch.einsum('bhqd, bhkd -> bhqk', queries, keys) 
-        if mask is not None:
-            fill_value = torch.finfo(torch.float32).min
-            energy.mask_fill(~mask, fill_value)
 
         scaling = self.emb_size ** (1 / 2)
         att = F.softmax(energy / scaling, dim=-1)
@@ -128,8 +118,9 @@ class CAW(nn.Module):
 
 
 class STSTransformerBlock(nn.Module):
-    def __init__(self, emb_size1,emb_size2,num_heads=5,drop_p=0.5,forward_expansion=4,forward_drop_p=0.5):
+    def __init__(self, emb_size1, emb_size2):
         super().__init__()
+        drop_p = 0.5
         self.emb_size = emb_size1
         self.att_drop1 = nn.Dropout(drop_p)
         self.projection1 = nn.Linear(emb_size1, emb_size1)
@@ -146,13 +137,13 @@ class STSTransformerBlock(nn.Module):
         self.values2 = nn.Linear(emb_size2, emb_size2)
 
         self.layerNorm3=nn.LayerNorm(emb_size1+emb_size2)
-        self.mha=MultiHeadAttention(emb_size1+emb_size2, num_heads, 0.5)
+        self.mha=MultiHeadAttention(emb_size1+emb_size2, 5, 0.5)
         self.drop3=nn.Dropout(drop_p)
 
         self.ffb=nn.Sequential(
             nn.LayerNorm(emb_size1+emb_size2),
             FeedForwardBlock(
-                emb_size1+emb_size2, expansion=forward_expansion, drop_p=forward_drop_p),
+                emb_size1+emb_size2, expansion=4, drop_p=0.5),
             nn.Dropout(drop_p)
         )
 
@@ -196,96 +187,127 @@ class STSTransformerBlock(nn.Module):
         x += res
         x = rearrange(x, 'b t e -> b e 1 t')
         return x
+    
+class CAWMASASTST(BaseModel):
+    def __init__(self, num_classes, device='cuda', **kwargs):
+        super().__init__(num_classes, device=device, **kwargs)
 
-class CAW_MASA_STST(nn.Module):
-    def __init__(self,classNum,channelNum,chan_spe,tlen=32):
-        super().__init__()
+    def build_model(self, time_steps: int = 32, num_electrodes: int = 124, spectral_channels = 25, lr=1e-3):
+        self.time_steps = time_steps
+        self.num_electrodes = num_electrodes
+        self.spectral_channels = spectral_channels
+        self.lr = lr
+
+        # Spectral
         self.chunks=5
-        self.conv1s=[]
-        self.speWidth=chan_spe//self.chunks
-        for i in range(self.chunks):
-            ASA= nn.Sequential(
-                ConvBlock(channelNum, 25, (self.speWidth,1)),
+        self.speWidth=self.spectral_channels//self.chunks
+
+        self.asa_modules = nn.ModuleList([
+            #ASA
+            nn.Sequential(
+                ConvBlock(self.num_electrodes, 25, (self.speWidth,1)),
                 Rearrange("a b c d -> a (c d) b"),
-                GCN(tlen,25),
+                GCN(self.time_steps,25),
                 Rearrange("a b (c d) -> a c d b",d=1),
                 ConvBlock(25, 2, (1,1)),
             )
-            self.conv1s.append(ASA.cuda())
-
-        self.spe1 =ConvBlock(channelNum,30,(chan_spe,1))
+            for _ in range(self.chunks)
+        ])
+        self.fullband_convolution = ConvBlock(self.num_electrodes, 30, (self.spectral_channels, 1))
         self.spe2 = nn.Sequential(
             ConvBlock(40,30,(1,13)),
             ConvBlock(30,10,(1,11)),
-        )
-        self.speAvgPool=nn.Sequential(
-            nn.AdaptiveAvgPool2d((1,8)),
-            nn.Dropout2d(0.5)
-        )
-        self.spa1 = ConvBlock(1,40,(channelNum,1))
-        self.spa2 = nn.Sequential(
-            ConvBlock(40,30,(1,13)),
-            ConvBlock(30,10,(1,11)),
-        )
-        self.spaAvgPool=nn.Sequential(
             nn.AdaptiveAvgPool2d((1,8)),
             nn.Dropout2d(0.5)
         )
 
-        self.fuseConv1=nn.Sequential(
+        # Spatial
+        self.caw=CAW(self.num_electrodes,2)
+        self.spa1 = ConvBlock(1,40,(self.num_electrodes,1))
+        self.spa2 = nn.Sequential(
+            ConvBlock(40,30,(1,13)),
+            ConvBlock(30,10,(1,11)),
+            nn.AdaptiveAvgPool2d((1,8)),
+            nn.Dropout2d(0.5)
+        )
+
+        # Feature Fusion
+        self.feature_fusion = nn.Sequential(
+            STSTransformerBlock(40,40),
             ConvBlock(80,70,(1,13)),
             ConvBlock(70,80,(1,11)),
             nn.AdaptiveAvgPool2d((1,8)),
             nn.Dropout2d(0.5)
         )
 
-        self.fuseAvgPool=nn.Sequential(
-            nn.AdaptiveAvgPool2d((1,8)),
-            nn.Dropout2d(0.5)
-        )
-        self.fusinTB=STSTransformerBlock(40,40)
-       
-        self.caw=CAW(chan_spe,2)
-
         self.feaLen=(100)*8
         self.classify = nn.Sequential(
-            nn.Linear(self.feaLen, classNum),
+            nn.Linear(self.feaLen, self.num_classes),
             nn.Softmax(dim=1),
         )
-    def forward(self, x, xcwt):
-        x, _ = self.caw(x)
-        #MASA
+
+        self.loss_fn = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, self.parameters()),
+                                          lr=self.lr)
+
+    def forward(self, batch):
+        x = batch['eeg']
+        xcwt = batch['cwt']
+        # Spectral (MASA)
         xcwts=xcwt.chunk(self.chunks,dim=2)
-        out1s=[]
-        for i in range(self.chunks):
-            out1=self.conv1s[i](xcwts[i])
-            out1s.append(out1)
-        gcn_out=torch.cat(out1s,1)
+        asa_features=[]
+        for i, asa_modules in enumerate(self.asa_modules):
+            asa_features.append(asa_modules(xcwts[i]))
+        asa_features=torch.cat(asa_features,1)
 
-        spe1_out= self.spe1(xcwt) 
-        spe1_out= torch.cat((spe1_out,gcn_out), dim=1)
+        fullband_features = self.fullband_convolution(xcwt) 
+        spectral_features = torch.cat((fullband_features,asa_features), dim=1) # also used for feature fusion
 
-        spe2_out= self.spe2(spe1_out)
-        spe_out=self.speAvgPool(spe2_out)
-        spe_out = spe_out.squeeze()
+        spectral_out = self.spe2(spectral_features).squeeze() # spectral features go through conv before being concatenated with other features
 
-        spa1_out= self.spa1(x.unsqueeze(1))
-        spa2_out1= self.spa2[0](spa1_out)
-        spa2_out2= self.spa2[1](spa2_out1)
-        spa_out=self.spaAvgPool(spa2_out2)
-        spa_out = spa_out.squeeze()
+        # Spatial
+        x, _ = self.caw(x)
+        spa1_out= self.spa1(x.unsqueeze(1)) # also used for feature fusion
 
-        fuse_out1 = self.fusinTB(spe1_out,spa1_out)
-        fuse_out1 = self.fuseConv1(fuse_out1).squeeze()
+        spa_out= self.spa2(spa1_out).squeeze() # spatial features go through conv before being concatenated with other features
 
-        out = torch.cat((spe_out,spa_out,fuse_out1),dim=1)
+        # Feature Fusion
+        fuse_out = self.feature_fusion(spectral_features,spa1_out).squeeze()
 
-        out = self.classify(out.reshape(-1,self.feaLen))
+        fused_features = torch.cat((spectral_out,spa_out,fuse_out),dim=1)
+
+        # Classification Unit
+        out = self.classify(fused_features.reshape(-1,self.feaLen))
         return out
-
-if __name__ == '__main__':
-    x=torch.randn(10,64,30).cuda() # EEG data with 64 channel x 30 timepoint
-    x_spe=torch.randn(10,64,20,30).cuda() #  time-frequency images of EEG with 64 channel x 20 frequency scale x 30 timepoint
-    model=CAW_MASA_STST(2,64,20,30).cuda()
-    pre_y=model(x,x_spe)
-    print("pre_y.shape:",pre_y.shape)
+    
+    def compute_loss(self, batch, logits):
+        """
+        Computes cross-entropy loss between logits and labels.
+        Expects 'class_idx' in batch.
+        """
+        class_idx = batch['class_idx']
+        loss = self.loss_fn(logits, class_idx)
+        return loss
+    
+    def predict(self, batch):
+        """
+        Performs inference and returns:
+          - preds: Tensor [B] (predicted class labels),
+          - labels: Tensor [B] (ground truth),
+          - scores: Tensor [B, num_classes] (softmax probabilities),
+          - embeddings: None (not used),
+          - subjects: list of subject IDs.
+        """
+        labels = batch['class_idx']
+        subjects = list(batch['subject'])
+        logits = self.forward(batch)
+        preds, scores = self.compute_predictions(logits)
+        return preds, labels, scores, None, subjects
+    
+    def compute_predictions(self, logits):
+        """
+        Compute predictions from logits.
+        """
+        scores = torch.softmax(logits, dim=1)
+        preds = torch.argmax(scores, dim=1)
+        return preds, scores

@@ -107,10 +107,10 @@ class Kaneshiro(BaseEEGDataset):
         use_images: if True, load image features from images_root/images_file.
         use_original: if True, loads from the 'original' folder; else 'updated'.
     """
-    def __init__(self, eeg_root: str, use_original: bool = False,
-                 use_images: bool = False, images_root: str = None, images_file: str = None):
+    def __init__(self, eeg_root: str, images_root: str, use_original: bool,
+                 use_images: bool = False, images_file: str = None, use_cwt: bool = False):
         super().__init__(eeg_root=eeg_root, images_root=images_root,
-                         use_images=use_images, images_file=images_file)
+                         use_images=use_images, images_file=images_file, use_cwt=use_cwt)
         self.use_original = use_original
 
         mode = 'original' if self.use_original else 'updated'
@@ -119,7 +119,9 @@ class Kaneshiro(BaseEEGDataset):
         self.metadata = pd.read_csv(meta_path)
         self.samples_dir = samples_dir
 
-        self.cache = {}
+        self.eeg_cache = {}
+        if self.use_cwt:
+            self.cwt_cache = {}
 
         if self.use_images:
             self.images = torch.load(os.path.join(self.images_root, self.images_file), weights_only=False)
@@ -132,6 +134,7 @@ class Kaneshiro(BaseEEGDataset):
         Returns a dict:
           {
             'eeg'      : Tensor [ch (124), t (651)] or Tensor [ch (124), t (32)],
+            'eeg'      : Tensor (if use_cwt=True, else not present),
             'class_idx': int,
             'image_idx': int,
             'subject'  : int,
@@ -140,17 +143,24 @@ class Kaneshiro(BaseEEGDataset):
         """
         row = self.metadata.iloc[idx]  # Get the row for this index
 
-        if idx not in self.cache:
-            path = os.path.join(self.samples_dir, row['filepath'])
-            self.cache[idx] = torch.load(path)
-        
+        if idx not in self.eeg_cache:
+            eeg_path = os.path.join(self.samples_dir, row['filepath'])
+            self.eeg_cache[idx] = torch.load(eeg_path)
 
+            if self.use_cwt:
+                cwt_path = os.path.join(self.samples_dir, "cwt_" + row['filepath'])
+                self.cwt_cache[idx] = torch.load(cwt_path)
+        
         sample = {
-            'eeg': self.cache[idx],
+            'eeg': self.eeg_cache[idx],
             'class_idx': int(row['class_idx']),
             'image_idx': int(row['image_idx']),
             'subject': int(row['subject'])
         }
+
+        if self.use_cwt:
+            sample['cwt'] = self.cwt_cache[idx]
+
         if self.use_images:
             feat = self.images[str(sample['class_idx'] + 1)][str(sample['image_idx'] + 1)]
             sample['image'] = torch.from_numpy(feat)

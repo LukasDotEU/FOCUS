@@ -81,8 +81,8 @@ def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
     print(f"Saved {trial_idx} trials to {out_dir}")
 
 class ThingsEEG2(BaseEEGDataset):
-    def __init__(self, eeg_root: str, images_root: str, 
-                 use_images: bool = False, images_file: bool = None, average_reps: bool = False):
+    def __init__(self, eeg_root: str, images_root: str, average_reps: bool = False,
+                 use_images: bool = False, images_file: bool = None, use_cwt: bool = False):
         """
         Dataset for ThingsEEG2 trials saved via preprocess().
 
@@ -94,7 +94,7 @@ class ThingsEEG2(BaseEEGDataset):
           - trial_xxxxxx.pt files
         images_root/image_set/... for loading raw images if use_images.
         """
-        super().__init__(eeg_root=eeg_root, images_root=images_root, use_images=use_images, images_file=images_file)
+        super().__init__(eeg_root=eeg_root, images_root=images_root, use_images=use_images, images_file=images_file, use_cwt=use_cwt)
         self.average_reps = average_reps  # If True, average the 4 repetitions of each image
         
         mode = 'averaged' if self.average_reps else 'multitrials'
@@ -104,7 +104,9 @@ class ThingsEEG2(BaseEEGDataset):
         self.class_labels = torch.load(os.path.join(self.samples_dir, 'class_labels.pt'))
         self.image_labels = torch.load(os.path.join(self.samples_dir, 'image_labels.pt'))
 
-        self.cache = {}
+        self.eeg_cache = {}
+        if self.use_cwt:
+            self.cwt_cache = {}
 
         if self.use_images:
             self.images = torch.load(os.path.join(self.images_root, 'image_set', self.images_file), weights_only=False)
@@ -117,6 +119,7 @@ class ThingsEEG2(BaseEEGDataset):
         Returns a dict:
           {
             'eeg'      : Tensor [ch (63), t],
+            'eeg'      : Tensor (if use_cwt=True, else not present),
             'class_idx': int,
             'image_idx': int,
             'subject'  : int,
@@ -125,16 +128,23 @@ class ThingsEEG2(BaseEEGDataset):
         """
         row = self.metadata.iloc[idx]
 
-        if idx not in self.cache:
-            path = os.path.join(self.samples_dir, row['filepath'])
-            self.cache[idx] = torch.load(path)
+        if idx not in self.eeg_cache:
+            eeg_path = os.path.join(self.samples_dir, row['filepath'])
+            self.eeg_cache[idx] = torch.load(eeg_path)
+
+            if self.use_cwt:
+                cwt_path = os.path.join(self.samples_dir, "cwt_" + row['filepath'])
+                self.cwt_cache[idx] = torch.load(cwt_path)
 
         sample = {
-            'eeg': self.cache[idx],
+            'eeg': self.eeg_cache[idx],
             'class_idx': int(row['class_idx']),
             'image_idx': int(row['image_idx']),
             'subject': int(row['subject'])
         }
+
+        if self.use_cwt:
+            sample['cwt'] = self.cwt_cache[idx]
 
         if self.use_images:
             # lookup using loaded label lists
