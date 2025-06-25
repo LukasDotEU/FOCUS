@@ -232,8 +232,8 @@ class CAWMASASTST(BaseModel):
         )
 
         # Feature Fusion
+        self.feature_transformer = STSTransformerBlock(40,40)
         self.feature_fusion = nn.Sequential(
-            STSTransformerBlock(40,40),
             ConvBlock(80,70,(1,13)),
             ConvBlock(70,80,(1,11)),
             nn.AdaptiveAvgPool2d((1,8)),
@@ -272,7 +272,8 @@ class CAWMASASTST(BaseModel):
         spa_out= self.spa2(spa1_out).squeeze() # spatial features go through conv before being concatenated with other features
 
         # Feature Fusion
-        fuse_out = self.feature_fusion(spectral_features,spa1_out).squeeze()
+        transformer_out = self.feature_transformer(spectral_features,spa1_out)
+        fuse_out = self.feature_fusion(transformer_out).squeeze()
 
         fused_features = torch.cat((spectral_out,spa_out,fuse_out),dim=1)
 
