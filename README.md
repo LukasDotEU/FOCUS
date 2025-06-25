@@ -31,12 +31,14 @@ This repository implements several methods for evaluating EEG signals in combina
   - [`model_EEGChannelNet.py`](models/model_EEGChannelNet.py): EEGChannelNet model for EEG classification.
   - [`model_EEGNet.py`](models/model_EEGNet.py): EEGNet implementation adapted from torcheeg.
   - [`model_NiceEEG.py`](models/model_NiceEEG.py): NICE-EEG model adapted from the NICE-EEG repository.
-  - [`model_ATMS.py`](models/model_ATMS.py): **[EXPERIMENTAL]** ATMS model adapted from the ATMS repository. 
+  - [`model_ATMS.py`](models/model_ATMS.py): **[EXPERIMENTAL]** ATMS model adapted from the ATMS repository.
+  - [`model_CAWMASASTST.py`](models/model_CAWMASASTST.py): CAWMASASTST model adapted from the CAWMASASTST repository.
 
 - **feature_preprocessing/**  
   Contains feature preprocessing scripts:
   - [`NiceEEG_preprocessing.py`](feature_preprocessing/NiceEEG_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features and individual features.
   - [`ATMS_preprocessing.py`](feature_preprocessing/ATMS_preprocessing.py): Extracts CLIP features for images, CLIP features for labels and saves them.
+  - [`CAWMASASTST_eegcwt_preprocessing.py`](feature_preprocessing/CAWMASASTST_eegcwt_preprocessing.py): Computed EEG CWTs at different freqeuncies and saves them.
 
 - **utils/**  
   Contains utility modules for metrics, data splits, and timing:
