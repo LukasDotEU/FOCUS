@@ -49,7 +49,7 @@ def preprocess(eeg_root: str, use_original: bool):
       - 'subject' : int (subject index)
     """
     mode = 'original' if use_original else 'updated'
-    out_dir = os.path.join(eeg_root, f'kaneshiro_individual_pt_{mode}')
+    out_dir = os.path.join(eeg_root, f'kaneshiro{mode}_individual_pt')
     os.makedirs(out_dir, exist_ok=True)
 
     records = []
@@ -114,7 +114,7 @@ class Kaneshiro(BaseEEGDataset):
         self.use_original = use_original
 
         mode = 'original' if self.use_original else 'updated'
-        samples_dir = os.path.join(self.eeg_root, f'kaneshiro_individual_pt_{mode}')
+        samples_dir = os.path.join(self.eeg_root, f'kaneshiro{mode}_individual_pt')
         meta_path = os.path.join(samples_dir, 'metadata.csv')
         self.metadata = pd.read_csv(meta_path)
         self.samples_dir = samples_dir
