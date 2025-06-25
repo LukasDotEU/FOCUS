@@ -1,3 +1,6 @@
+import os
+import json
+import argparse
 import torch
 import random
 import numpy as np
@@ -19,6 +22,7 @@ from config import DATASET_CONFIGS, MODEL_CONFIGS, SELECTED_CONFIGS
 NUM_WORKERS = 4
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+# Seed for reproducibility
 def set_seed(seed=42):
     random.seed(seed)
     np.random.seed(seed)
@@ -26,7 +30,7 @@ def set_seed(seed=42):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-def train_and_evaluate(dataset_conf:dict, model_conf:dict):
+def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
     """
     Workflow per (dataset, model):
       1) Load entire dataset → get outer_train_idx, outer_test_idx (per-subject, all-subjects, or LOSO).
@@ -40,44 +44,48 @@ def train_and_evaluate(dataset_conf:dict, model_conf:dict):
     results = []
     set_seed(0) # Set a fixed seed for reproducibility
 
-    # 1) Instantiate the full dataset
+    # Prepare run directory for this dataset-model-split
+    split_tag = f"{dataset_conf['name']}_{model_conf['name']}"
+
+    # Setup run-specific save directory
+    run_dir = os.path.join(save_dir, split_tag)
+    os.makedirs(run_dir, exist_ok=True)
+    # Save run configuration
+    config_data = {
+        'dataset_conf': {k: v for k, v in dataset_conf.items() if k != 'class'},
+        'model_conf': {k: v for k, v in model_conf.items() if k != 'class'},
+    }
+    with open(os.path.join(run_dir, 'config.json'), 'w') as f:
+        json.dump(config_data, f, indent=2)
+
+    # Instantiate full dataset
     DSClass = dataset_conf['class']
     dataset_args = model_conf.get('dataset_args', None)
-    images_file = (dataset_args.get('clip_indiviual_feature_file', None) if dataset_args is not None else None)
-    if 'args' in dataset_conf:
-        full_dataset: BaseEEGDataset = DSClass(
-            eeg_root=dataset_conf['eeg_root'],
-            images_root=dataset_conf['images_root'],
-            use_images=model_conf['use_images'],
-            use_cwt=model_conf['use_cwt'],
-            images_file=images_file,
-            **dataset_conf['args'],
-        )
-    else:
-        full_dataset: BaseEEGDataset = DSClass(
-            eeg_root=dataset_conf['eeg_root'],
-            images_root=dataset_conf['images_root'],
-            use_images=model_conf['use_images'],
-            use_cwt=model_conf['use_cwt'],
-            images_file=images_file,
-        )
+    images_file = (dataset_args.get('clip_indiviual_feature_file', None) if dataset_args else None)
+    ds_kwargs = {
+        'eeg_root': dataset_conf['eeg_root'],
+        'images_root': dataset_conf['images_root'],
+        'use_images': model_conf['use_images'],
+        'use_cwt': model_conf['use_cwt'],
+        'images_file': images_file,
+        **dataset_conf.get('args', {})
+    }
+    full_dataset: BaseEEGDataset = DSClass(**ds_kwargs)
 
     # Build outer splits
     splitter = SplitGenerator(full_dataset.metadata)
     per_subj_splits = splitter.get_per_subject_splits()
     cross_subj_splits = splitter.get_cross_subject_splits()
     all_subj_cv_splits = splitter.get_stratified_kfold_splits(n_splits=10)
-
-    # Tag each split with a `split_type` for later grouping
     all_outer_splits = per_subj_splits + all_subj_cv_splits + cross_subj_splits
 
-    # Retrieve training parameters from model_conf.
+    # Retrieve training parameters from model_conf
     epochs = model_conf['epochs']
     batch_size = model_conf['batch_size']
 
-    # 3) Loop through each outer split, carve out a single <train/val> and then do final test
+    # Loop through each outer split, carve out a single <train/val>, then do train and testing
     for split in all_outer_splits:
-        split_name:str = split['name']
+        split_name = split['name']
         outer_train_idx = split['train_idx']
         outer_test_idx = split['test_idx']
 
@@ -85,30 +93,17 @@ def train_and_evaluate(dataset_conf:dict, model_conf:dict):
             print(f"[{split_name}] outer_train has only {len(outer_train_idx)} samples → skipping.")
             continue
 
-        # 2a) carve out inner (train_inner_idx, val_idx) according to split_type via the class method:
+        # Inner split for validation
         train_inner_idx, val_idx = splitter.get_inner_split(outer_train_idx, split_name)
 
-        # Build DataLoaders with batch_size from model_conf.
-        train_loader = DataLoader(
-            Subset(full_dataset, train_inner_idx),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=NUM_WORKERS
-        )
-        val_loader = DataLoader(
-            Subset(full_dataset, val_idx),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=NUM_WORKERS
-        )
-        test_loader = DataLoader(
-            Subset(full_dataset, outer_test_idx),
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=NUM_WORKERS
-        )
+        train_loader = DataLoader(Subset(full_dataset, train_inner_idx),
+                                  batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS)
+        val_loader = DataLoader(Subset(full_dataset, val_idx),
+                                batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS)
+        test_loader = DataLoader(Subset(full_dataset, outer_test_idx),
+                                 batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS)
 
-        # 2b) Instantiate fresh model
+        # Instantiate model
         ModelClass = model_conf['class']
         model_name = model_conf['name']
         model_args = model_conf['args'].copy()
@@ -130,70 +125,82 @@ def train_and_evaluate(dataset_conf:dict, model_conf:dict):
         print(f"[{split_name}] Initialized model '{model_name}' with '{ds_conf['name']}'")
         print(f"[{split_name}] total_params={total_params}, trainable_params={trainable_params}")
 
-        # 2c) Training loop (track best-F1 on validation)
         evaluator = Evaluator(average='macro')
         best_val_score = -float('inf')
         best_epoch = -1
         best_state = None
+        best_val_train_metrics = None
+        best_val_metrics = None
 
-        # Training loop.
+        # Training loop (track best-F1 on validation)
         for epoch in range(epochs):
+            # Training
             with Timer() as t_train:
                 avg_loss, train_metrics = model.train_one_epoch(train_loader, evaluator)
             train_time = t_train.elapsed
 
+            # Validation
             val_metrics = model.evaluate_on_dataloader(val_loader, evaluator)
             current_f1 = val_metrics['f1']
             if current_f1 > best_val_score:
                 best_val_score = current_f1
                 best_epoch = epoch
                 best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+                best_val_train_metrics = train_metrics
+                best_val_metrics = val_metrics
 
             print(
-                f"[{split_name}] Epoch {epoch+1} → Loss={avg_loss:.4f} Train_F1={train_metrics['f1']:.4f}, "
-                f"Val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})"
+                f"[{split_name}] Epoch {epoch+1}: loss={avg_loss:.4f}, train_F1={train_metrics['f1']:.4f}, "
+                f"val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})"
             )
 
-        # 2d) Reload best weights (if any)
+        # Reload best weights
         if best_state is not None:
             model.load_state_dict(best_state)
-            print(f"[{split_name}] Reloaded best model from epoch {best_epoch+1} (Val_F1={best_val_score:.4f})")
+            print(f"[{split_name}] Reloaded best model from epoch {best_epoch+1} (val_f1={best_val_score:.4f})")
 
-        # 2e) Evaluate on outer_test_idx
-        print(f"[{split_name}] Evaluating on test set ({len(outer_test_idx)} samples)")
+        # Final evaluation on test set
         with Timer() as t_test:
             test_metrics = model.evaluate_on_dataloader(test_loader, evaluator)
         test_time = t_test.elapsed
 
-        # Re‐evaluate on val set with best weights
-        best_val_metrics = model.evaluate_on_dataloader(val_loader, evaluator)
+        # Checkpoint: save from best epoch
+        checkpoint = {
+            'epoch': best_epoch+1,
+            'model_state_dict': best_state,
+            'metrics': {
+                'train': best_val_train_metrics,
+                'val': best_val_metrics,
+                'test': test_metrics
+            }
+        }
+        ckpt_path = os.path.join(run_dir, f'{split_name}.pt')
+        torch.save(checkpoint, ckpt_path)
 
-        # Build result dict:
+        # Record summary
         row = {
-            'dataset':           dataset_conf['name'],
-            'model':             model_conf['name'],
-            'split_name':        split_name,
-            'total_params':      total_params,
-            'trainable_params':  trainable_params,
-            'best_epoch':        best_epoch + 1,
-            'train_time_sec':    train_time,
-
-            # validation metrics at best weights
-            'val_accuracy':      best_val_metrics['accuracy'],
-            'val_f1':            best_val_metrics['f1'],
-            'val_precision':     best_val_metrics['precision'],
-            'val_recall':        best_val_metrics['recall'],
-            'val_cohen_kappa':   best_val_metrics['cohen_kappa'],
-            'val_auc':           best_val_metrics['auc'],
-
+            'dataset': dataset_conf['name'],
+            'model': model_conf['name'],
+            'split_name': split_name,
+            'total_params': total_params,
+            'trainable_params': trainable_params,
+            'best_epoch': best_epoch + 1,
+            'train_time_sec': train_time,
+            # validation metrics
+            'val_accuracy': best_val_metrics['accuracy'],
+            'val_f1': best_val_metrics['f1'],
+            'val_precision': best_val_metrics['precision'],
+            'val_recall': best_val_metrics['recall'],
+            'val_cohen_kappa': best_val_metrics['cohen_kappa'],
+            'val_auc': best_val_metrics['auc'],
             # test metrics
-            'test_accuracy':     test_metrics['accuracy'],
-            'test_f1':           test_metrics['f1'],
-            'test_precision':    test_metrics['precision'],
-            'test_recall':       test_metrics['recall'],
-            'test_cohen_kappa':  test_metrics['cohen_kappa'],
-            'test_auc':          test_metrics['auc'],
-            'test_time_sec':     test_time
+            'test_accuracy': test_metrics['accuracy'],
+            'test_f1': test_metrics['f1'],
+            'test_precision': test_metrics['precision'],
+            'test_recall': test_metrics['recall'],
+            'test_cohen_kappa': test_metrics['cohen_kappa'],
+            'test_auc': test_metrics['auc'],
+            'test_time_sec': test_time
         }
         results.append(row)
 
@@ -205,37 +212,41 @@ def train_and_evaluate(dataset_conf:dict, model_conf:dict):
             f"Time: {test_time:.4f}s"
         )
 
-        # Clean up GPU memory
+        # Clean up
         del model
         torch.cuda.empty_cache()
 
     return results
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Evaluate models with checkpointing')
+    parser.add_argument('--testing', action='store_true', help='Save to test_model_weights instead of model_weights')
+    args = parser.parse_args()
+
+    base_dir = 'testing_model_weights' if args.testing else 'model_weights'
+    os.makedirs(base_dir, exist_ok=True)
+
     all_results = []
     # Iterate over selected configuration combinations.
     for combo in SELECTED_CONFIGS:
-        ds_name = combo['dataset']
-        model_name = combo['model']
-
         # Retrieve dataset configuration.
-        ds_conf = next(item for item in DATASET_CONFIGS if item['name'] == ds_name)
+        ds_conf = next(d for d in DATASET_CONFIGS if d['name'] == combo['dataset'])
+
         # Retrieve model configuration.
-        m_conf = next(item for item in MODEL_CONFIGS if item['name'] == model_name)
+        m_conf = next(m for m in MODEL_CONFIGS if m['name'] == combo['model'])
+        # Update model args with dataset specifics
+        m_conf['args'].update({
+            'time_steps': ds_conf['time_steps'],
+            'num_electrodes': ds_conf['num_electrodes'],
+            'num_classes': ds_conf['num_classes'],
+            **ds_conf.get('model_args', {}).get(combo['model'], {})
+        })
 
-        m_conf['args']['time_steps'] = ds_conf['time_steps']
-        m_conf['args']['num_electrodes'] = ds_conf['num_electrodes']
-        m_conf['args']['num_classes'] = ds_conf['num_classes']
-
-        # retrieve specific model args depandant on dataset.
-        if model_name in ds_conf['model_args'].keys():
-            for k, v in ds_conf['model_args'][model_name].items():
-                m_conf['args'][k] = v
-
-        res = train_and_evaluate(ds_conf, m_conf)
+        res = train_and_evaluate(ds_conf, m_conf, base_dir)
         all_results.extend(res)
 
     df_results = pd.DataFrame(all_results)
-    out_csv = "evaluation_summary.csv"
+    out_csv = os.path.join(base_dir, 'evaluation_summary.csv')
     df_results.to_csv(out_csv, index=False)
     print(f"Evaluation finished. Summary saved to {out_csv}")
