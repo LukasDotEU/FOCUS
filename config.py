@@ -2,6 +2,7 @@ from datasets.eegImageNet_dataset import EEGImageNet
 from datasets.kaneshiro_dataset import Kaneshiro
 from datasets.thingsEEG2_dataset import ThingsEEG2
 from models.model_ATMS import ATMS
+from models.model_CAWMASASTST import CAWMASASTST
 from models.model_EEGNet import EEGNet
 from models.model_EEGChannelNet import EEGChannelNet
 from models.model_NiceEEG import NiceEEG
@@ -15,6 +16,7 @@ DATASET_CONFIGS = [
         'class': EEGImageNet,
         'eeg_root': '../Datasets/EEGImageNet/',
         'images_root': '../Datasets/EEGImageNet/OnlyUsedImageNet40Images/',
+		'sampling_rate': 1000,
         'time_steps': 440,
         'num_electrodes': 128,
         'num_classes': 40,
@@ -38,6 +40,7 @@ DATASET_CONFIGS = [
 		'class': ThingsEEG2,
 		'eeg_root': '../Datasets/Things-EEG2/Preprocessed_data_250Hz/',
 		'images_root': '../Datasets/Things-EEG2/Image_set/',
+		'sampling_rate': 250,
 		'time_steps': 250,
 		'num_electrodes': 63,
 		'num_classes': 1654,
@@ -61,6 +64,7 @@ DATASET_CONFIGS = [
 		'class': ThingsEEG2,
 		'eeg_root': '../Datasets/Things-EEG2/Preprocessed_data_250Hz/',
 		'images_root': '../Datasets/Things-EEG2/Image_set/',
+		'sampling_rate': 250,
 		'time_steps': 250,
 		'num_electrodes': 63,
 		'num_classes': 1654,
@@ -82,8 +86,9 @@ DATASET_CONFIGS = [
     { # 51840 trials
         'name': 'Kaneshiro',
         'class': Kaneshiro,
-        'eeg_root': '../Datasets/Kaneshiro/',
+        'eeg_root': '../Datasets/Kaneshiro/KaneshiroUpdated/',
         'images_root': '../Datasets/Kaneshiro/Kaneshiro_images/',
+		'sampling_rate': 1000,
         'time_steps': 651,
         'num_electrodes': 124,
         'num_classes': 6,
@@ -105,8 +110,9 @@ DATASET_CONFIGS = [
     { # 51857 trials
         'name': 'KaneshiroOriginal', # Can't use NiceEEG or ATMS on this one as time_steps not big enough for their convolution
         'class': Kaneshiro,
-        'eeg_root': '../Datasets/Kaneshiro/',
+        'eeg_root': '../Datasets/Kaneshiro/KaneshiroOriginal',
         'images_root': '../Datasets/Kaneshiro/Kaneshiro_images/',
+		'sampling_rate': 62.5,
         'time_steps': 32,
         'num_electrodes': 124,
         'num_classes': 6,
@@ -145,6 +151,7 @@ MODEL_CONFIGS = [
         },
         'pretraining': False,
         'use_images': False,
+		'use_cwt': False,
         'epochs': 100,
         'batch_size': 64
     },
@@ -173,6 +180,7 @@ MODEL_CONFIGS = [
         },
         'pretraining': False,
         'use_images': False,
+		'use_cwt': False,
         'epochs': 100,
         'batch_size': 16
     },
@@ -193,6 +201,7 @@ MODEL_CONFIGS = [
         },
 		'pretraining': False,
 		'use_images': True,
+		'use_cwt': False,
 		'dataset_args': {
 			'clip_indiviual_feature_file': 'NICE_clip_individual_features.pth'
         },
@@ -218,11 +227,25 @@ MODEL_CONFIGS = [
         },
 		'pretraining': False,
 		'use_images': True,
+		'use_cwt': False,
 		'dataset_args': {
 			'clip_indiviual_feature_file': 'ATMS_clip_individual_features.pth'
         },
 		'epochs': 40, #Check
 		'batch_size': 64, # Check, paper says 16 but code 64?
+    },
+	{
+        'name': 'CAWMASASTST',
+		'class': CAWMASASTST,
+		'args': {
+			'spectral_channels': 25,
+			'lr': 1e-3,
+        },
+		'pretraining': False,
+		'use_images': False,
+		'use_cwt': True,
+		'epochs': 70,
+		'batch_size': 64,
     },
     # Add more model configurations here...
 ]
@@ -231,8 +254,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        'dataset': 'Kaneshiro',
-        'model': 'EEGNet',
+        'dataset': 'ThingsEEG2',
+        'model': 'CAWMASASTST',
     },
     # Add more combinations as desired...
 ]
