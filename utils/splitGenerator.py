@@ -45,17 +45,19 @@ class SplitGenerator:
                 continue
 
             # label each image by its class (assume consistent)
-            img_lbl = [sub_meta[sub_meta['image_idx'] == img]['class_idx'].iloc[0] for img in img_ids]
+            img_lbl = [sub_meta[sub_meta['image_idx'] == img]['class_idx'].iat[0] for img in img_ids]
             sss = StratifiedShuffleSplit(n_splits=1, test_size=0.1, random_state=42)
 
             # Only one split, so we can use StratifiedShuffleSplit directly 
             # (would need to use kfold instead if i want to do 10-fold cross validation on each subject as well):
             train_pos, test_pos = next(sss.split(img_ids, img_lbl))
-            train_set = set([img_ids[i] for i in train_pos])
-            test_set = set([img_ids[i] for i in test_pos])
 
-            train_idx = sub_meta[sub_meta['image_idx'].isin(train_set)].index.tolist()
-            test_idx  = sub_meta[sub_meta['image_idx'].isin(test_set)].index.tolist()
+            train_set = set(img_ids[i] for i in train_pos)
+            test_set  = set(img_ids[i] for i in test_pos)
+
+            train_idx = sub_meta[sub_meta['image_idx'].isin(train_set)]['idx'].tolist()
+            test_idx  = sub_meta[sub_meta['image_idx'].isin(test_set)]['idx'].tolist()
+
             splits.append({'name': f'per_subject_{sid}', 'train_idx': train_idx, 'test_idx': test_idx})
             print(f"per_subject_{sid}: {len(train_idx)} train / {len(test_idx)} test")
         return splits
@@ -67,9 +69,9 @@ class SplitGenerator:
             { 'name': str, 'train_idx': [...], 'test_idx': [...] }.
         """
         splits = []
-        all_indices = set(self.meta.index.tolist())
+        all_indices = set(self.meta['idx'].tolist())
         for sid in self.subject_ids:
-            test_idx = self.meta.index[self.meta['subject'] == sid].tolist()
+            test_idx = self.meta[self.meta['subject'] == sid]['idx'].tolist()
             train_idx = list(all_indices.difference(test_idx))
             splits.append({
                 'name': f'cross_subject_LOSO_{sid}',
@@ -77,12 +79,12 @@ class SplitGenerator:
                 'test_idx': test_idx
             })
             print(f"Created LOSO split: subject {sid} as test ({len(test_idx)} samples), "
-                        f"{len(train_idx)} samples for training")
+                  f"{len(train_idx)} samples for training")
         return splits
 
     def get_stratified_kfold_splits(self, n_splits: int = 10) -> list[dict]:
         """
-        10-fold CV for “all-subjects 80/20” style. We create a combined label 
+        10-fold CV for “all-subjects 90/10” style. We create a combined label 
         combined_lbl = class_idx*1000 + subject so that StratifiedKFold will 
         attempt to distribute each (class,subject) pair evenly across folds.
 
@@ -98,7 +100,7 @@ class SplitGenerator:
         sgkf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
         splits = []
         for fold_id, (train_ix, test_ix) in enumerate(
-            sgkf.split(X=np.zeros(self.N), y=combined_lbl, groups=self.meta['group_id'])
+            sgkf.split(X=self.meta['idx'], y=combined_lbl, groups=self.meta['group_id'])
         ):
             splits.append({
                 'name': f'all_subjects_CV_fold_{fold_id}',
@@ -117,22 +119,22 @@ class SplitGenerator:
                 print(f"[{split_name}] outer_train < 2 → no inner split. "
                       f"Returning all {len(outer_train_idx)} as train_inner, 0 as val.")
                 return outer_train_idx, []
-            lbl = [subset[subset['image_idx'] == img]['class_idx'].iloc[0] for img in imgs]
+            lbl = [subset[subset['image_idx'] == img]['class_idx'].iat[0] for img in imgs]
             sss = StratifiedShuffleSplit(n_splits=1, test_size=0.1/0.9, random_state=42)
             train_pos, val_pos = next(sss.split(imgs, lbl))
             train_imgs = set(imgs[i] for i in train_pos)
             val_set = set(imgs[i] for i in val_pos)
 
-            train_inner = subset[subset['image_idx'].isin(train_imgs)].index.tolist()
-            val_idx = subset[subset['image_idx'].isin(val_set)].index.tolist()
+            train_inner = subset[subset['image_idx'].isin(train_imgs)]['idx'].tolist()
+            val_idx = subset[subset['image_idx'].isin(val_set)]['idx'].tolist()
             
         elif split_name.startswith('cross_subject_LOSO_'):
             # pick subject with fewest samples in outer_train
             sub_counts = subset['subject'].value_counts()
             val_sub = sub_counts.idxmin()
 
-            val_idx = subset[subset['subject'] == val_sub].index.tolist()
-            train_inner = [i for i in subset.index.tolist() if i not in val_idx]
+            val_idx = subset[subset['subject'] == val_sub]['idx'].tolist()
+            train_inner = [i for i in subset['idx'].tolist() if i not in val_idx]
 
         elif split_name.startswith('all_subjects_CV_fold_'):
             combined_lbl = (
@@ -147,11 +149,11 @@ class SplitGenerator:
             # This yields 9 splits; we'll grab the first one only which is 10% of original:
             # It's easier this way than to collapse to unique groups,
             # do a single StratifiedShuffleSplit on them an map back up.
-            train_ix, val_ix = next(sgkf.split(X=np.zeros(len(subset)), 
+            train_ix, val_ix = next(sgkf.split(X=subset['idx'], 
                                                y=combined_lbl, 
                                                groups=subset['group_id'].values))
-            train_inner = subset.index[train_ix].tolist()
-            val_idx = subset.index[val_ix].tolist()
+            train_inner = subset['idx'].iloc[train_ix].tolist()
+            val_idx = subset['idx'].iloc[val_ix].tolist()
 
         else:
             raise ValueError(f"Unknown split: {split_name}")
