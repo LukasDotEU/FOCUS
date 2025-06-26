@@ -1,11 +1,10 @@
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
-
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedGroupKFold
 
 class SplitGenerator:
     """
-    Encapsulates all "outer split" creation logic, plus "inner split" logic:
+    Encapsulates outer- and inner-split creation, ensuring no image_idx appears in more than one partition.
       1) Per-subject (80/20 within each subject, stratified on class_idx)
       2) Cross-subject (LOSO: leave one subject out for test, rest→train)
       3) All-subjects 10-fold CV stratified on (class_idx, subject)
@@ -20,10 +19,14 @@ class SplitGenerator:
         metadata: DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx'].
                   We assume the DataFrame's index matches the dataset's sample indices (0..N-1).
         """
-        self.meta = metadata #.copy().reset_index(drop=True)
+        self.meta = metadata
         self.subject_ids = sorted(self.meta['subject'].unique().tolist())
-        self.num_classes = int(self.meta['class_idx'].nunique())
         self.N = len(self.meta)
+
+        # Precompute group labels for subject-image pairs
+        grp = list(zip(self.meta['subject'], self.meta['image_idx']))
+        self.meta['group_id'], _ = pd.factorize(grp)
+
 
     # TODO: Change for whole class to use the idx in metadata instead of index of the DataFrame (to be extra sure).
     def get_per_subject_splits(self) -> list[dict]:
@@ -34,29 +37,27 @@ class SplitGenerator:
         """
         splits = []
         for sid in self.subject_ids:
-            idxs_s = self.meta.index[self.meta['subject'] == sid].tolist()
-            if len(idxs_s) < 2:
-                print(f"Subject {sid} has fewer than 2 samples → skipping per-subject split.")
+            # group by image within subject
+            sub_meta = self.meta[self.meta['subject'] == sid]
+            img_ids = sub_meta['image_idx'].unique().tolist()
+            if len(img_ids) < 2:
+                print(f"Subject {sid} has <2 samples → skipping per-subject split.")
                 continue
 
-            classes_s = self.meta.loc[idxs_s, 'class_idx'].values
-            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
+            # label each image by its class (assume consistent)
+            img_lbl = [sub_meta[sub_meta['image_idx'] == img]['class_idx'].iloc[0] for img in img_ids]
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.1, random_state=42)
 
             # Only one split, so we can use StratifiedShuffleSplit directly 
             # (would need to use kfold instead if i want to do 10-fold cross validation on each subject as well):
-            train_idx_s = []
-            test_idx_s = []
-            for train_pos, test_pos in sss.split(idxs_s, classes_s):
-                train_idx_s = [idxs_s[i] for i in train_pos]
-                test_idx_s  = [idxs_s[i] for i in test_pos]
+            train_pos, test_pos = next(sss.split(img_ids, img_lbl))
+            train_set = set([img_ids[i] for i in train_pos])
+            test_set = set([img_ids[i] for i in test_pos])
 
-            splits.append({
-                'name': f'per_subject_{sid}',
-                'train_idx': train_idx_s,
-                'test_idx': test_idx_s
-            })
-            print(f"Created per_subject split for subject {sid}: "
-                        f"{len(train_idx_s)} train / {len(test_idx_s)} test")
+            train_idx = sub_meta[sub_meta['image_idx'].isin(train_set)].index.tolist()
+            test_idx  = sub_meta[sub_meta['image_idx'].isin(test_set)].index.tolist()
+            splits.append({'name': f'per_subject_{sid}', 'train_idx': train_idx, 'test_idx': test_idx})
+            print(f"per_subject_{sid}: {len(train_idx)} train / {len(test_idx)} test")
         return splits
 
     def get_cross_subject_splits(self) -> list[dict]:
@@ -94,90 +95,67 @@ class SplitGenerator:
             + self.meta['subject'].astype(int)
         ).values
 
-        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+        sgkf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
         splits = []
-        for fold_id, (train_pos, test_pos) in enumerate(skf.split(np.arange(self.N), combined_lbl)):
-            train_idx = train_pos.tolist()
-            test_idx = test_pos.tolist()
+        for fold_id, (train_ix, test_ix) in enumerate(
+            sgkf.split(X=np.zeros(self.N), y=combined_lbl, groups=self.meta['group_id'])
+        ):
             splits.append({
                 'name': f'all_subjects_CV_fold_{fold_id}',
-                'train_idx': train_idx,
-                'test_idx': test_idx
+                'train_idx': train_ix.tolist(),
+                'test_idx': test_ix.tolist()
             })
-            print(f"Created CV fold {fold_id}: {len(train_idx)} train / {len(test_idx)} test")
+            print(f"all_subjects_CV_fold_{fold_id}: {len(train_ix)} train / {len(test_ix)} test")
         return splits
 
-    def get_inner_split(self, outer_train_idx: list[int], split_name: str) -> tuple[list[int], list[int]]:
-        """
-        Given an outer_train_idx list and the split_name it belongs to, carve out:
-          - train_inner_idx
-          - val_idx
-
-        according to the split-type encoded in split_name:
-          • If split_name.startswith('per_subject_'): stratify by class_idx within outer_train_idx.
-          • If split_name.startswith('cross_subject_LOSO_'): pick exactly one subject from
-            outer_train_idx (the subject with fewest samples) to serve as val; the rest → train_inner.
-          • If split_name.startswith('all_subjects_CV_fold_'): stratify by combined (class_idx,subject)
-            on outer_train_idx with an 80/20 split.
-
-        Returns:
-            (train_inner_idx: List[int], val_idx: List[int])
-        """
-        # PER‐SUBJECT: stratify by class_idx
+    def get_inner_split(self, outer_train_idx: list[int], split_name: str):
+        # inner splits also group by image
+        subset = self.meta.loc[outer_train_idx]
         if split_name.startswith('per_subject_'):
-            classes = self.meta.loc[outer_train_idx, 'class_idx'].values
-            if len(outer_train_idx) < 2:
-                # Too few samples to split further
+            imgs = subset['image_idx'].unique().tolist()
+            if len(imgs) < 2:
                 print(f"[{split_name}] outer_train < 2 → no inner split. "
-                               f"Returning all {len(outer_train_idx)} as train_inner, 0 as val.")
+                      f"Returning all {len(outer_train_idx)} as train_inner, 0 as val.")
                 return outer_train_idx, []
+            lbl = [subset[subset['image_idx'] == img]['class_idx'].iloc[0] for img in imgs]
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.1/0.9, random_state=42)
+            train_pos, val_pos = next(sss.split(imgs, lbl))
+            train_imgs = set(imgs[i] for i in train_pos)
+            val_set = set(imgs[i] for i in val_pos)
 
-            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-            train_inner = []
-            val_idx = []
-            for train_pos, val_pos in sss.split(outer_train_idx, classes):
-                train_inner = [outer_train_idx[i] for i in train_pos]
-                val_idx = [outer_train_idx[i] for i in val_pos]
-
-            print(f"[{split_name}] Per-subject inner split: {len(train_inner)} train_inner / {len(val_idx)} val")
-            return train_inner, val_idx
-        
-        # TODO: Check this function for correctness, especially the logic for cross-subject splits.
-        # CROSS‐SUBJECT (LOSO): pick one subject from outer_train_idx to be val
+            train_inner = subset[subset['image_idx'].isin(train_imgs)].index.tolist()
+            val_idx = subset[subset['image_idx'].isin(val_set)].index.tolist()
+            
         elif split_name.startswith('cross_subject_LOSO_'):
-            sub_counts = self.meta.loc[outer_train_idx, 'subject'].value_counts().to_dict()
-            val_subject = min(sub_counts, key=lambda s: sub_counts[s])
-            val_idx = self.meta.index[
-                (self.meta['subject'] == val_subject) 
-                & (self.meta.index.isin(outer_train_idx))
-            ].tolist()
-            train_inner = [i for i in outer_train_idx if i not in val_idx]
+            # pick subject with fewest samples in outer_train
+            sub_counts = subset['subject'].value_counts()
+            val_sub = sub_counts.idxmin()
 
-            print(f"[{split_name}] Cross-subject inner split: subject {val_subject} as val "
-                        f"({len(val_idx)} samples), {len(train_inner)} for train_inner")
-            return train_inner, val_idx
+            val_idx = subset[subset['subject'] == val_sub].index.tolist()
+            train_inner = [i for i in subset.index.tolist() if i not in val_idx]
 
-        # ALL‐SUBJECTS CV: stratify by combined (class_idx,subject)
         elif split_name.startswith('all_subjects_CV_fold_'):
-            if len(outer_train_idx) < 2:
+            combined_lbl = (
+                subset['class_idx'].astype(int) * 1000
+                + subset['subject'].astype(int)
+            ).values
+            if len(combined_lbl) < 2:
                 print(f"[{split_name}] outer_train < 2 → no inner split. "
-                               f"Returning all {len(outer_train_idx)} as train_inner, 0 as val.")
+                      f"Returning all {len(outer_train_idx)} as train_inner, 0 as val.")
                 return outer_train_idx, []
-
-            subset_meta = self.meta.loc[outer_train_idx]
-            combined_lbl = (subset_meta['class_idx'].astype(int) * 1000
-                            + subset_meta['subject'].astype(int)).values
-
-            sss = StratifiedShuffleSplit(n_splits=1, test_size=0.2, random_state=42)
-            train_inner = []
-            val_idx = []
-            for train_pos, val_pos in sss.split(outer_train_idx, combined_lbl):
-                train_inner = [outer_train_idx[i] for i in train_pos]
-                val_idx = [outer_train_idx[i] for i in val_pos]
-
-            print(f"[{split_name}] All‐subjects CV inner split: "
-                        f"{len(train_inner)} train_inner / {len(val_idx)} val")
-            return train_inner, val_idx
+            sgkf = StratifiedGroupKFold(n_splits=9, shuffle=True, random_state=42)
+            # This yields 9 splits; we'll grab the first one only which is 10% of original:
+            # It's easier this way than to collapse to unique groups,
+            # do a single StratifiedShuffleSplit on them an map back up.
+            train_ix, val_ix = next(sgkf.split(X=np.zeros(len(subset)), 
+                                               y=combined_lbl, 
+                                               groups=subset['group_id'].values))
+            train_inner = subset.index[train_ix].tolist()
+            val_idx = subset.index[val_ix].tolist()
 
         else:
-            raise ValueError(f"Unknown split_name for inner-split: {split_name}")
+            raise ValueError(f"Unknown split: {split_name}")
+
+        
+        print(f"{split_name} inner: {len(train_inner)} train_inner / {len(val_idx)} val")
+        return train_inner, val_idx
