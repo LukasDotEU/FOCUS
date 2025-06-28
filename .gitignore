@@ -3,3 +3,5 @@ __pycache__/
 
 testing_model_weights/
 model_weights/
+
+*.pth

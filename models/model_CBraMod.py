@@ -4,8 +4,11 @@ import torch
 from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
+from einops.layers.torch import Rearrange
 
 import copy
+
+from models.model_base import BaseModel
 
 class TransformerEncoder(nn.Module):
     def __init__(self, encoder_layer, num_layers):
@@ -121,21 +124,166 @@ class PatchEmbedding(nn.Module):
 
         return patch_emb
 
-class CBraMod(nn.Module):
-    def __init__(self, out_dim=200, d_model=200, dim_feedforward=800, n_layer=12, nhead=8):
-        super().__init__()
+class CBraMod(BaseModel):
+    def __init__(self, num_classes, device='cuda', **kwargs):
+        super().__init__(num_classes, device=device, **kwargs)
+
+    def build_model(self, time_steps, num_electrodes, dropout, use_pretrained, 
+                    lr, weight_decay, label_smoothing, epochs, train_size, clip_value,
+                    d_model=200, dim_feedforward=800, n_layer=12, nhead=8):
+        self.clip_value = clip_value
+        self.d_model = d_model
+        self.use_pretrained = use_pretrained
+        self.num_electrodes = num_electrodes
+        self.time_steps = time_steps
+
         self.patch_embedding = PatchEmbedding(d_model)
+
         encoder_layer = TransformerEncoderLayer(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward)
         self.encoder = TransformerEncoder(encoder_layer, num_layers=n_layer)
-        self.proj_out = nn.Sequential(
-            nn.Linear(d_model, out_dim),
-        )
-        self.apply(_weights_init)
 
-    def forward(self, x):
+        if self.use_pretrained:
+            loaded_state_dict = torch.load("models/model_CBraMod_pretrained_weights.pth", map_location='cpu')
+            model_dict = self.state_dict()
+            filtered_dict = {k: v for k, v in loaded_state_dict.items() if k in model_dict and v.size() == model_dict[k].size()}
+            
+            model_dict.update(filtered_dict) # makes sure parameters not in loaded dict stay intact
+            self.load_state_dict(model_dict) # actually apply the new parameters
+        else:
+            self.apply(_weights_init)
+
+        # Taken from TUEV
+        #self.num_patches = self.time_steps // d_model
+        self.num_patches = 5
+        classifier = 'avgpooling_patch_reps' # CHECK WHICH ONE
+        if classifier == 'avgpooling_patch_reps':
+            self.classifier = nn.Sequential(
+                Rearrange('b c s d -> b d c s'),
+                nn.AdaptiveAvgPool2d((1, 1)),
+                nn.Flatten(),
+                nn.Linear(self.d_model, self.num_classes),
+            )
+        elif classifier == 'all_patch_reps_onelayer':
+            self.classifier = nn.Sequential(
+                Rearrange('b c s d -> b (c s d)'),
+                nn.Linear(self.num_electrodes * self.num_patches * self.d_model, self.num_classes),
+            )
+        elif classifier == 'all_patch_reps_twolayer':
+            self.classifier = nn.Sequential(
+                Rearrange('b c s d -> b (c s d)'),
+                nn.Linear(self.num_electrodes * self.num_patches * self.d_model, self.d_model),
+                nn.ELU(),
+                nn.Dropout(dropout),
+                nn.Linear(self.d_model, self.num_classes),
+            )
+        elif classifier == 'all_patch_reps':
+            self.classifier = nn.Sequential(
+                Rearrange('b c s d -> b (c s d)'),
+                nn.Linear(self.num_electrodes * self.num_patches * self.d_model, self.num_patches * self.d_model),
+                nn.ELU(),
+                nn.Dropout(dropout),
+                nn.Linear(self.num_patches * self.d_model, self.d_model),
+                nn.ELU(),
+                nn.Dropout(dropout),
+                nn.Linear(self.d_model, self.num_classes),
+            )
+
+        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+        self.optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, self.parameters()),
+                                          lr=lr, weight_decay=weight_decay)
+        self.optimizer_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, T_max=epochs * train_size, eta_min=1e-6
+        )
+
+    def forward(self, batch):
+        # Taking the middle is not clean dividable by 200 is my idea
+        def patchify_eeg(eeg: Tensor, patch_length: int = 200) -> Tensor:
+            """
+            Split (B, C, T) into (B, C, P, patch_length), trimming equally at
+            start/end if T % patch_length != 0.
+            """
+            B, C, T = eeg.shape
+            assert T >= patch_length, f"EEG length {T} is too short for patch size {patch_length}"
+            num_patches = T // patch_length
+            rem = T - num_patches * patch_length
+            if rem:
+                cut_start = rem // 2
+                cut_end   = rem - cut_start
+                eeg = eeg[:, :, cut_start : T - cut_end]
+            # now shape is (B, C, num_patches * patch_length)
+            return eeg.view(B, C, num_patches, patch_length)
+        
+        # This is my own idea, it's not from CBraMod
+        def patchify_eeg_overlap(eeg: torch.Tensor, num_patches: int, patch_length: int) -> torch.Tensor:
+            """
+            Splits (B, C, T) into (B, C, P, patch_length) with P = num_patches,
+            using overlapping windows equally spaced across the time axis.
+            Only pads if T < patch_length to ensure one full patch.
+            """
+            B, C, T = eeg.shape
+            assert num_patches > 1, f"Number of patches {num_patches} must be >1"
+            assert T <= num_patches * patch_length, \
+                f"EEG length {T} is to big to be covered by {num_patches} patches with a size of {patch_length} each."
+            assert T >= patch_length, f"EEG length {T} is too short for patch size {patch_length}"
+
+            max_start = T - patch_length
+            # linspace from 0 to max_start in num_patches steps
+            floats = torch.linspace(0, max_start, steps=num_patches)
+            starts = [int(round(x.item())) for x in floats]
+
+            # Slice each overlapping patch
+            patches = []
+            for s in starts:
+                patch = eeg[:, :, s : s + patch_length]  # (B, C, patch_length)
+                patches.append(patch.unsqueeze(2))        # → (B, C, 1, patch_length)
+
+            return torch.cat(patches, dim=2)              # → (B, C, num_patches, patch_length)
+        
+        
+        x = patchify_eeg(batch['eeg'], patch_length=self.d_model)
+        #x = patchify_eeg_overlap(batch['eeg'], num_patches=self.num_patches, patch_length=self.d_model)
+
         patch_emb = self.patch_embedding(x)
         feats = self.encoder(patch_emb)
-
-        out = self.proj_out(feats)
-
+        out = self.classifier(feats)
         return out
+    
+    def compute_loss(self, batch, logits):
+        """
+        Computes cross-entropy loss between logits and labels.
+        Expects 'class_idx' in batch.
+        """
+        class_idx = batch['class_idx']
+        loss = self.loss_fn(logits, class_idx)
+        return loss
+    
+    def predict(self, batch):
+        """
+        Performs inference and returns:
+          - preds: Tensor [B] (predicted class labels),
+          - labels: Tensor [B] (ground truth),
+          - scores: Tensor [B, num_classes] (softmax probabilities),
+          - embeddings: None (not used),
+          - subjects: list of subject IDs.
+        """
+        labels = batch['class_idx']
+        subjects = list(batch['subject'])
+        logits = self.forward(batch)
+        preds, scores = self.compute_predictions(logits)
+        return preds, labels, scores, None, subjects
+    
+    def compute_predictions(self, logits):
+        """
+        Compute predictions from logits.
+        """
+        scores = torch.softmax(logits, dim=1)
+        preds = torch.argmax(scores, dim=1)
+        return preds, scores
+    
+    def optimize(self) -> None:
+        """
+        run optimizer steps + other
+        """
+        nn.utils.clip_grad_norm_(self.parameters(), max_norm=self.clip_value)
+        self.optimizer.step()
+        self.optimizer_scheduler.step()

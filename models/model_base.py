@@ -57,6 +57,12 @@ class BaseModel(nn.Module):
           - optionally: confidence scores or embeddings.
         """
         raise NotImplementedError
+    
+    def optimize(self) -> None:
+        """
+        run optimizer steps
+        """
+        self.optimizer.step()
 
     def count_params(self):
         """
@@ -90,7 +96,7 @@ class BaseModel(nn.Module):
             output = self.forward(batch)
             loss = self.compute_loss(batch, output)
             loss.backward()
-            self.optimizer.step()
+            self.optimize()
 
             running_loss += loss.item()
             n_batches += 1

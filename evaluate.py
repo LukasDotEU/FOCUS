@@ -119,6 +119,10 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
             else:
                 Exception("Splitname not known.")
             model_args['num_subjects'] = num_subjects
+        # inject epochs and train_size into CBraMod for lr_scheduler
+        elif model_name == "CBraMod":
+            model_args['epochs'] = epochs
+            model_args['train_size'] = len(train_loader)
 
         model: BaseModel = ModelClass(device=DEVICE, **model_args)
         total_params, trainable_params = model.count_params()
