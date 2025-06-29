@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedShuffleSplit, StratifiedGroupKFold
+from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit, StratifiedGroupKFold
 
 class SplitGenerator:
     """
@@ -24,6 +24,7 @@ class SplitGenerator:
         self.N = len(self.meta)
 
         # Precompute group labels for subject-image pairs
+        print(self.meta['image_idx'])
         grp = list(zip(self.meta['subject'], self.meta['image_idx']))
         self.meta['group_id'], _ = pd.factorize(grp)
 
@@ -84,30 +85,48 @@ class SplitGenerator:
 
     def get_stratified_kfold_splits(self, n_splits: int = 10) -> list[dict]:
         """
-        10-fold CV for “all-subjects 90/10” style. We create a combined label 
-        combined_lbl = class_idx*1000 + subject so that StratifiedKFold will 
-        attempt to distribute each (class,subject) pair evenly across folds.
-
-        Return a list of dicts:
-            { 'name': str, 'train_idx': [...], 'test_idx': [...] }.
+        10-fold CV: approximate stratification on (class_idx, subject), 
+        grouping by unique (image_idx, subject) and then expanding repetitions.
         """
-        # Build combined labels for stratification:
-        combined_lbl = (
-            self.meta['class_idx'].astype(int) * 1000
-            + self.meta['subject'].astype(int)
-        ).values
+        # 1) Build group-level DataFrame (one row per unique image×subject)
+        group_df = (
+            self.meta
+            .loc[:, ['image_idx', 'subject', 'class_idx']]
+            .drop_duplicates()
+            .reset_index(drop=True)
+        )
 
-        sgkf = StratifiedGroupKFold(n_splits=n_splits, shuffle=True, random_state=42)
+        # 2) Create a stratification label = class_idx*1000 + subject
+        group_df['strat_label'] = group_df['class_idx'].astype(int) * 1000 + group_df['subject'].astype(int)
+
+        # 3) Stratified split on these groups
+        skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
         splits = []
-        for fold_id, (train_ix, test_ix) in enumerate(
-            sgkf.split(X=self.meta['idx'], y=combined_lbl, groups=self.meta['group_id'])
+
+        for fold_id, (train_gpos, test_gpos) in enumerate(
+            skf.split(group_df, group_df['strat_label'])
         ):
+            # Which groups (image, subject) go into train/test for this fold
+            train_groups = set(
+                tuple(x) for x in group_df.iloc[train_gpos][['image_idx', 'subject']].values
+            )
+            test_groups = set(
+                tuple(x) for x in group_df.iloc[test_gpos][['image_idx', 'subject']].values
+            )
+
+            # 4) Map back to full sample indices (including all repetitions)
+            is_train = self.meta[['image_idx', 'subject']].apply(tuple, axis=1).isin(train_groups)
+            is_test  = self.meta[['image_idx', 'subject']].apply(tuple, axis=1).isin(test_groups)
+
+            train_idx = self.meta.loc[is_train, 'idx'].tolist()
+            test_idx  = self.meta.loc[is_test, 'idx'].tolist()
+
             splits.append({
                 'name': f'all_subjects_CV_fold_{fold_id}',
-                'train_idx': train_ix.tolist(),
-                'test_idx': test_ix.tolist()
+                'train_idx': train_idx,
+                'test_idx': test_idx
             })
-            print(f"all_subjects_CV_fold_{fold_id}: {len(train_ix)} train / {len(test_ix)} test")
+            print(f"all_subjects_CV_fold_{fold_id}: {len(train_idx)} train / {len(test_idx)} test")
         return splits
 
     def get_inner_split(self, outer_train_idx: list[int], split_name: str):
