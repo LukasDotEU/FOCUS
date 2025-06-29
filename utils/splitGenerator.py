@@ -24,7 +24,6 @@ class SplitGenerator:
         self.N = len(self.meta)
 
         # Precompute group labels for subject-image pairs
-        print(self.meta['image_idx'])
         grp = list(zip(self.meta['subject'], self.meta['image_idx']))
         self.meta['group_id'], _ = pd.factorize(grp)
 
@@ -88,38 +87,43 @@ class SplitGenerator:
         10-fold CV: approximate stratification on (class_idx, subject), 
         grouping by unique (image_idx, subject) and then expanding repetitions.
         """
-        # 1) Build group-level DataFrame (one row per unique image×subject)
-        group_df = (
+        # 1) Build mapping: group_id -> all sample idx (all repetitions)
+        group_to_samples = (
             self.meta
-            .loc[:, ['image_idx', 'subject', 'class_idx']]
-            .drop_duplicates()
-            .reset_index(drop=True)
+            .groupby('group_id')['idx']
+            .apply(list)
+            .to_dict()
         )
 
-        # 2) Create a stratification label = class_idx*1000 + subject
-        group_df['strat_label'] = group_df['class_idx'].astype(int) * 1000 + group_df['subject'].astype(int)
+        # 2) Prepare arrays of unique group_ids and their strat labels
+        unique_gids = np.array(list(group_to_samples.keys()), dtype=int)
+
+        # Grab one representative row per group to get class & subject
+        repr_rows = (
+            self.meta
+            .drop_duplicates(subset='group_id')
+            .set_index('group_id')
+        )
+
+        # strat_label = class_idx * 1000 + subject
+        strat_labels = (
+            repr_rows.loc[unique_gids, 'class_idx'].astype(int) * 1000
+            + repr_rows.loc[unique_gids, 'subject'].astype(int)
+        ).values
 
         # 3) Stratified split on these groups
         skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
         splits = []
 
-        for fold_id, (train_gpos, test_gpos) in enumerate(
-            skf.split(group_df, group_df['strat_label'])
+        for fold_id, (train_pos, test_pos) in enumerate(
+            skf.split(unique_gids, strat_labels)
         ):
-            # Which groups (image, subject) go into train/test for this fold
-            train_groups = set(
-                tuple(x) for x in group_df.iloc[train_gpos][['image_idx', 'subject']].values
-            )
-            test_groups = set(
-                tuple(x) for x in group_df.iloc[test_gpos][['image_idx', 'subject']].values
-            )
+            train_gids = unique_gids[train_pos]
+            test_gids  = unique_gids[test_pos]
 
-            # 4) Map back to full sample indices (including all repetitions)
-            is_train = self.meta[['image_idx', 'subject']].apply(tuple, axis=1).isin(train_groups)
-            is_test  = self.meta[['image_idx', 'subject']].apply(tuple, axis=1).isin(test_groups)
-
-            train_idx = self.meta.loc[is_train, 'idx'].tolist()
-            test_idx  = self.meta.loc[is_test, 'idx'].tolist()
+            # 4) Expand back to full sample indices (all 4 reps per group)
+            train_idx = [idx for gid in train_gids for idx in group_to_samples[gid]]
+            test_idx  = [idx for gid in test_gids  for idx in group_to_samples[gid]]
 
             splits.append({
                 'name': f'all_subjects_CV_fold_{fold_id}',
