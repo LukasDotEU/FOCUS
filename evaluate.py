@@ -97,11 +97,11 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
         train_inner_idx, val_idx = splitter.get_inner_split(outer_train_idx, split_name)
 
         train_loader = DataLoader(Subset(full_dataset, train_inner_idx),
-                                  batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS)
+                                  batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
         val_loader = DataLoader(Subset(full_dataset, val_idx),
-                                batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS)
+                                batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
         test_loader = DataLoader(Subset(full_dataset, outer_test_idx),
-                                 batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS)
+                                 batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
 
         # Instantiate model
         ModelClass = model_conf['class']

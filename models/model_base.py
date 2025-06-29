@@ -89,7 +89,7 @@ class BaseModel(nn.Module):
             # Move tensors to the correct device.
             for key, value in batch.items():
                 if isinstance(value, torch.Tensor):
-                    batch[key] = value.to(self.device)
+                    batch[key] = value.to(self.device, non_blocking=True)
 
             # TODO: check order of zero_grad and forward
             self.optimizer.zero_grad()
@@ -139,7 +139,7 @@ class BaseModel(nn.Module):
                 # Move tensors to the target device.
                 for key, value in batch.items():
                     if isinstance(value, torch.Tensor):
-                        batch[key] = value.to(self.device)
+                        batch[key] = value.to(self.device, non_blocking=True)
 
                 # Expect predict() to return a tuple: (preds, labels, scores (optional), embeddings (optional), subjects)
                 preds, labels, scores, embeddings, subjects = self.predict(batch)
