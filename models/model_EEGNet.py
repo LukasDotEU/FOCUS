@@ -168,14 +168,12 @@ class EEGNet(BaseModel):
         Performs inference and returns:
           - preds: Tensor [B] (predicted class labels),
           - labels: Tensor [B] (ground truth),
-          - scores: Tensor [B, num_classes] (softmax probabilities),
-          - subjects: list of subject IDs.
+          - scores: Tensor [B, num_classes] (softmax probabilities)
         """
         labels = batch['class_idx']
-        subjects = list(batch['subject'])
         logits = self.forward(batch)
         preds, scores = self.compute_predictions(logits)
-        return preds, labels, scores, subjects
+        return preds, labels, scores
     
     def compute_predictions(self, logits):
         """

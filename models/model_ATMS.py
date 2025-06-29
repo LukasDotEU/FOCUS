@@ -366,7 +366,7 @@ class ATMS(BaseModel):
         eeg_projection = self.proj_eeg(eeg_embedding)
         
         preds, scores = self.compute_predictions(eeg_projection)
-        return preds, labels, scores, list(subject_ids)
+        return preds, labels, scores
     
     def compute_predictions(self, eeg_features):
         # eeg_features through list with img_features or just eeg_features is dirty hack to compute predictions

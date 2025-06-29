@@ -148,7 +148,6 @@ class NiceEEG(BaseModel):
     
     # TODO: make sure that order of all_center is THE SAME as the order of labels
     def predict(self, batch):
-        subjects = list(batch['subject'])
         labels = batch['class_idx']
         eeg = batch['eeg'].unsqueeze(1)  # [B, 1, C, T]
 
@@ -156,7 +155,7 @@ class NiceEEG(BaseModel):
         eeg_features = F.normalize(eeg_features, dim=-1)
         
         preds, scores = self.compute_predictions(eeg_features)
-        return preds, labels, scores, subjects
+        return preds, labels, scores
     
     def compute_predictions(self, eeg_features):
         # eeg_features through logits is dirty hack to compute predictions for training

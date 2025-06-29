@@ -129,7 +129,6 @@ class BaseModel(nn.Module):
         all_preds = []
         all_labels = []
         all_scores = []    # e.g., softmax probabilities
-        all_subjects = []
 
         with torch.no_grad():
             for batch in dataloader:
@@ -138,13 +137,12 @@ class BaseModel(nn.Module):
                     if isinstance(value, torch.Tensor):
                         batch[key] = value.to(self.device, non_blocking=True)
 
-                # Expect predict() to return a tuple: (preds, labels, scores, subjects)
-                preds, labels, scores, subjects = self.predict(batch)
+                # Expect predict() to return a tuple: (preds, labels, scores)
+                preds, labels, scores = self.predict(batch)
                 all_preds.append(preds.cpu())
                 all_labels.append(labels.cpu())
                 if scores is not None:
                     all_scores.append(scores.cpu())
-                all_subjects.extend(subjects)
 
         # Concatenate tensors and convert to numpy arrays when applicable.
         all_preds = torch.cat(all_preds).numpy()

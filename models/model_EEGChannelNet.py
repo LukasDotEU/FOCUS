@@ -122,10 +122,9 @@ class EEGChannelNet(BaseModel):
     def predict(self, batch):
         # Performs inference.
         labels = batch['class_idx']
-        subjects = list(batch['subject'])
         logits = self.forward(batch)
         preds, scores = self.compute_predictions(logits)
-        return preds, labels, scores, subjects
+        return preds, labels, scores
     
     def compute_predictions(self, logits):
         # Compute predictions from logits.
