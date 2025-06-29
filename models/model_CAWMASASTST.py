@@ -296,14 +296,13 @@ class CAWMASASTST(BaseModel):
           - preds: Tensor [B] (predicted class labels),
           - labels: Tensor [B] (ground truth),
           - scores: Tensor [B, num_classes] (softmax probabilities),
-          - embeddings: None (not used),
           - subjects: list of subject IDs.
         """
         labels = batch['class_idx']
         subjects = list(batch['subject'])
         logits = self.forward(batch)
         preds, scores = self.compute_predictions(logits)
-        return preds, labels, scores, None, subjects
+        return preds, labels, scores, subjects
     
     def compute_predictions(self, logits):
         """

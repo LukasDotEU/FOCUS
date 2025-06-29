@@ -44,9 +44,7 @@ class BaseModel(nn.Module):
 
     def predict(self, batch: dict):
         """
-        Runs inference on a batch (in eval mode) and returns:
-          - preds: Tensor of shape [batch_size] (int labels);
-          - optionally: confidence scores or embeddings.
+        Runs inference on a batch (in eval mode)
         """
         raise NotImplementedError
     
@@ -130,8 +128,7 @@ class BaseModel(nn.Module):
         self.eval()
         all_preds = []
         all_labels = []
-        all_scores = []    # e.g., softmax probabilities or cosine scores
-        all_embeddings = []
+        all_scores = []    # e.g., softmax probabilities
         all_subjects = []
 
         with torch.no_grad():
@@ -141,21 +138,18 @@ class BaseModel(nn.Module):
                     if isinstance(value, torch.Tensor):
                         batch[key] = value.to(self.device, non_blocking=True)
 
-                # Expect predict() to return a tuple: (preds, labels, scores (optional), embeddings (optional), subjects)
-                preds, labels, scores, embeddings, subjects = self.predict(batch)
+                # Expect predict() to return a tuple: (preds, labels, scores, subjects)
+                preds, labels, scores, subjects = self.predict(batch)
                 all_preds.append(preds.cpu())
                 all_labels.append(labels.cpu())
                 if scores is not None:
                     all_scores.append(scores.cpu())
-                if embeddings is not None:
-                    all_embeddings.append(embeddings.cpu())
                 all_subjects.extend(subjects)
 
         # Concatenate tensors and convert to numpy arrays when applicable.
         all_preds = torch.cat(all_preds).numpy()
         all_labels = torch.cat(all_labels).numpy()
         all_scores = torch.cat(all_scores).numpy() if all_scores else None
-        all_embeddings = torch.cat(all_embeddings).numpy() if all_embeddings else None
 
         results = evaluator.compute_metrics(
             y_true=all_labels,

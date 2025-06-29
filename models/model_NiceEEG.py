@@ -156,7 +156,7 @@ class NiceEEG(BaseModel):
         eeg_features = F.normalize(eeg_features, dim=-1)
         
         preds, scores = self.compute_predictions(eeg_features)
-        return preds, labels, scores, None, subjects
+        return preds, labels, scores, subjects
     
     def compute_predictions(self, eeg_features):
         # eeg_features through logits is dirty hack to compute predictions for training
