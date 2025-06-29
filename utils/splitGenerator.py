@@ -23,12 +23,24 @@ class SplitGenerator:
         self.subject_ids = sorted(self.meta['subject'].unique().tolist())
         self.N = len(self.meta)
 
-        # Precompute group labels for subject-image pairs
-        grp = list(zip(self.meta['subject'], self.meta['image_idx']))
-        self.meta['group_id'], _ = pd.factorize(grp)
+        ## Necessary for k-fold CV
+        # 1) factorize (image_idx, subject) into a single group_id
+        groups = list(zip(self.meta['image_idx'], self.meta['subject']))
+        self.meta['group_id'], _ = pd.factorize(groups)
 
+        # 2) build group_id → all sample idx (all repetitions)
+        self.group_to_samples = (self.meta.groupby('group_id')['idx'].apply(list).to_dict())
 
-    # TODO: Change for whole class to use the idx in metadata instead of index of the DataFrame (to be extra sure).
+        # 3) get one row per group and build stratification labels
+        repr_rows = (self.meta.drop_duplicates(subset='group_id').set_index('group_id'))
+        # unique group IDs
+        self.unique_gids = repr_rows.index.to_numpy()
+        # strat_label = class_idx * 1000 + subject
+        self.strat_labels = (
+            repr_rows['class_idx'].astype(int).to_numpy() * 1000
+            + repr_rows['subject'].astype(int).to_numpy()
+        )
+
     def get_per_subject_splits(self) -> list[dict]:
         """
         For each subject s, do an 80/20 split within that subject block,
@@ -87,43 +99,18 @@ class SplitGenerator:
         10-fold CV: approximate stratification on (class_idx, subject), 
         grouping by unique (image_idx, subject) and then expanding repetitions.
         """
-        # 1) Build mapping: group_id -> all sample idx (all repetitions)
-        group_to_samples = (
-            self.meta
-            .groupby('group_id')['idx']
-            .apply(list)
-            .to_dict()
-        )
-
-        # 2) Prepare arrays of unique group_ids and their strat labels
-        unique_gids = np.array(list(group_to_samples.keys()), dtype=int)
-
-        # Grab one representative row per group to get class & subject
-        repr_rows = (
-            self.meta
-            .drop_duplicates(subset='group_id')
-            .set_index('group_id')
-        )
-
-        # strat_label = class_idx * 1000 + subject
-        strat_labels = (
-            repr_rows.loc[unique_gids, 'class_idx'].astype(int) * 1000
-            + repr_rows.loc[unique_gids, 'subject'].astype(int)
-        ).values
-
-        # 3) Stratified split on these groups
         skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
         splits = []
 
         for fold_id, (train_pos, test_pos) in enumerate(
-            skf.split(unique_gids, strat_labels)
+            skf.split(self.unique_gids, self.strat_labels)
         ):
-            train_gids = unique_gids[train_pos]
-            test_gids  = unique_gids[test_pos]
+            train_gids = self.unique_gids[train_pos]
+            test_gids  = self.unique_gids[test_pos]
 
             # 4) Expand back to full sample indices (all 4 reps per group)
-            train_idx = [idx for gid in train_gids for idx in group_to_samples[gid]]
-            test_idx  = [idx for gid in test_gids  for idx in group_to_samples[gid]]
+            train_idx = [idx for gid in train_gids for idx in self.group_to_samples[gid]]
+            test_idx  = [idx for gid in test_gids  for idx in self.group_to_samples[gid]]
 
             splits.append({
                 'name': f'all_subjects_CV_fold_{fold_id}',
@@ -160,23 +147,25 @@ class SplitGenerator:
             train_inner = [i for i in subset['idx'].tolist() if i not in val_idx]
 
         elif split_name.startswith('all_subjects_CV_fold_'):
-            combined_lbl = (
-                subset['class_idx'].astype(int) * 1000
-                + subset['subject'].astype(int)
-            ).values
-            if len(combined_lbl) < 2:
-                print(f"[{split_name}] outer_train < 2 → no inner split. "
-                      f"Returning all {len(outer_train_idx)} as train_inner, 0 as val.")
-                return outer_train_idx, []
-            sgkf = StratifiedGroupKFold(n_splits=9, shuffle=True, random_state=42)
-            # This yields 9 splits; we'll grab the first one only which is 10% of original:
-            # It's easier this way than to collapse to unique groups,
-            # do a single StratifiedShuffleSplit on them an map back up.
-            train_ix, val_ix = next(sgkf.split(X=subset['idx'], 
-                                               y=combined_lbl, 
-                                               groups=subset['group_id'].values))
-            train_inner = subset['idx'].iloc[train_ix].tolist()
-            val_idx = subset['idx'].iloc[val_ix].tolist()
+            # restrict groups to those in outer_train
+            outer_meta = self.meta[self.meta['idx'].isin(outer_train_idx)]
+            outer_gids = outer_meta['group_id'].unique()
+
+            # their strat labels
+            mask = np.isin(self.unique_gids, outer_gids)
+            gids = self.unique_gids[mask]
+            labels = self.strat_labels[mask]
+
+            # StratifiedShuffleSplit for a single 1/9 validation fold which is 10% of original
+            sss = StratifiedShuffleSplit(n_splits=1, test_size=1/9, random_state=42)
+            train_pos, val_pos = next(sss.split(gids, labels))
+
+            train_gids = gids[train_pos]
+            val_gids   = gids[val_pos]
+
+            # Expand back to all repetitions
+            train_inner = [i for gid in train_gids for i in self.group_to_samples[gid]]
+            val_idx     = [i for gid in val_gids   for i in self.group_to_samples[gid]]
 
         else:
             raise ValueError(f"Unknown split: {split_name}")
