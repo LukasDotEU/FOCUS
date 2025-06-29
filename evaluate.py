@@ -140,11 +140,11 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
         for epoch in range(epochs):
             # Training
             with Timer() as t_train:
-                avg_loss, train_metrics = model.train_one_epoch(train_loader, evaluator)
+                avg_train_loss, train_metrics = model.train_one_epoch(train_loader, evaluator)
             train_time = t_train.elapsed
 
             # Validation
-            val_metrics = model.evaluate_on_dataloader(val_loader, evaluator)
+            avg_val_loss, val_metrics = model.evaluate_on_dataloader(val_loader, evaluator)
             current_f1 = val_metrics['f1']
             if current_f1 > best_val_score:
                 best_val_score = current_f1
@@ -154,7 +154,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
                 best_val_metrics = val_metrics
 
             print(
-                f"[{split_name}] Epoch {epoch+1}: loss={avg_loss:.4f}, train_F1={train_metrics['f1']:.4f}, "
+                f"[{split_name}] Epoch {epoch+1}: loss={avg_train_loss:.4f}, train_F1={train_metrics['f1']:.4f}, "
                 f"val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})"
             )
 
@@ -165,7 +165,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
 
         # Final evaluation on test set
         with Timer() as t_test:
-            test_metrics = model.evaluate_on_dataloader(test_loader, evaluator)
+            avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator)
         test_time = t_test.elapsed
 
         # Checkpoint: save from best epoch
@@ -190,6 +190,15 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
             'trainable_params': trainable_params,
             'best_epoch': best_epoch + 1,
             'train_time_sec': train_time,
+            'test_time_sec': test_time,
+            # train metrics at best val
+            'train_accuracy': best_val_train_metrics['accuracy'],
+            'train_f1': best_val_train_metrics['f1'],
+            'train_precision': best_val_train_metrics['precision'],
+            'train_recall': best_val_train_metrics['recall'],
+            'train_cohen_kappa': best_val_train_metrics['cohen_kappa'],
+            'train_auc': best_val_train_metrics['auc'],
+            'train_loss': avg_train_loss,
             # validation metrics
             'val_accuracy': best_val_metrics['accuracy'],
             'val_f1': best_val_metrics['f1'],
@@ -197,6 +206,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
             'val_recall': best_val_metrics['recall'],
             'val_cohen_kappa': best_val_metrics['cohen_kappa'],
             'val_auc': best_val_metrics['auc'],
+            'val_loss': avg_val_loss,
             # test metrics
             'test_accuracy': test_metrics['accuracy'],
             'test_f1': test_metrics['f1'],
@@ -204,7 +214,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
             'test_recall': test_metrics['recall'],
             'test_cohen_kappa': test_metrics['cohen_kappa'],
             'test_auc': test_metrics['auc'],
-            'test_time_sec': test_time
+            'test_loss': avg_test_loss,
         }
         results.append(row)
 

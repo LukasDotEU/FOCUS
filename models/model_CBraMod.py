@@ -265,11 +265,13 @@ class CBraMod(BaseModel):
         """
         Performs inference and returns:
           - preds: Tensor [B] (predicted class labels),
-          - scores: Tensor [B, num_classes] (softmax probabilities)
+          - scores: Tensor [B, num_classes] (softmax probabilities),
+          - loss
         """
         logits = self.forward(batch)
         preds, scores = self.compute_predictions(logits)
-        return preds, scores
+        loss = self.compute_loss(batch, logits)
+        return preds, scores, loss
     
     def compute_predictions(self, logits):
         """

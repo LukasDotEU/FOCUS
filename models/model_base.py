@@ -123,6 +123,9 @@ class BaseModel(nn.Module):
         and uses the evaluator to compute and return metrics as a dict.
         """
         self.eval()
+        running_loss = 0.0
+        n_batches = 0
+
         all_preds = []
         all_labels = []
         all_scores = []    # e.g., softmax probabilities
@@ -134,8 +137,13 @@ class BaseModel(nn.Module):
                     if isinstance(value, torch.Tensor):
                         batch[key] = value.to(self.device, non_blocking=True)
 
-                # Expect predict() to return a tuple: (preds, scores)
-                preds, scores = self.predict(batch)
+                # Expect predict() to return a tuple: (preds, scores, loss)
+                # TODO: refactor to do forward in here and give output to compute metrics and computer loss
+                preds, scores, loss = self.predict(batch)
+
+                running_loss += loss.item()
+                n_batches += 1
+
                 all_preds.append(preds.cpu())
                 all_labels.append(batch['class_idx'])
                 if scores is not None:
@@ -152,4 +160,5 @@ class BaseModel(nn.Module):
             y_score=all_scores
         )
 
-        return results
+        avg_loss = running_loss / n_batches
+        return avg_loss, results

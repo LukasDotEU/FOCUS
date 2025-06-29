@@ -334,43 +334,30 @@ class ATMS(BaseModel):
          
     def forward(self, batch):
         eeg = batch['eeg'] # [B, C, T]
-        img_features = batch['image'] # [B, proj_dim]
         subject_ids = batch['subject']
 
         eeg_features = self.encoder(eeg, subject_ids)
         eeg_embedding = self.enc_eeg(eeg_features)
         eeg_projection = self.proj_eeg(eeg_embedding)
 
-        return [eeg_projection, img_features]
+        return eeg_projection
     
-    # batch has to stay as it's used from other models...
     def compute_loss(self, batch, forward_out):
-        eeg_projection, img_features = forward_out
-
-        img_loss = self.loss_fn(eeg_projection, img_features, self.logit_scale)
+        img_loss = self.loss_fn(forward_out, batch['image'], self.logit_scale)
         # That was in original code but since alpha is 0.99, the text features barely have an influence.
         # The usage of text features for training is also not mentioned in paper.
         #text_loss = self.loss_func(eeg_projection, text_features, self.logit_scale)
         #loss = img_loss*0.99 + text_loss*(1-0.99)
-
         return img_loss
     
-    # make sure that order of all_center is THE SAME as the order of labels
     def predict(self, batch):
-        subject_ids = batch['subject']
-        eeg = batch['eeg']  # [B, C, T]
-
-        eeg_features = self.encoder(eeg, subject_ids)
-        eeg_embedding = self.enc_eeg(eeg_features)
-        eeg_projection = self.proj_eeg(eeg_embedding)
-        
+        eeg_projection = self.forward(batch)
         preds, scores = self.compute_predictions(eeg_projection)
-        return preds, scores
+        loss = self.compute_loss(batch, eeg_projection)
+        return preds, scores, loss
     
+    # make sure that order of all_center is THE SAME as the order of labels
     def compute_predictions(self, eeg_features):
-        # eeg_features through list with img_features or just eeg_features is dirty hack to compute predictions
-        if isinstance(eeg_features, list):
-            eeg_features = eeg_features[0]
         scores = (self.logit_scale * eeg_features @ self.feature_centers.t()).softmax(dim=-1)
         preds = torch.argmax(scores, dim=1)
         return preds, scores
