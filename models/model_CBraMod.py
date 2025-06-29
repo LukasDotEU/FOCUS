@@ -128,9 +128,9 @@ class CBraMod(BaseModel):
     def __init__(self, num_classes, device='cuda', **kwargs):
         super().__init__(num_classes, device=device, **kwargs)
 
-    def build_model(self, time_steps, num_electrodes, dropout, use_pretrained, 
+    def build_model(self, time_steps, num_electrodes, dropout, use_pretrained, classifier,
                     lr, weight_decay, label_smoothing, epochs, train_size, clip_value,
-                    d_model=200, dim_feedforward=800, n_layer=12, nhead=8):
+                    d_model=200, dim_feedforward=800, n_layer=12, nhead=8, num_patches=None):
         self.clip_value = clip_value
         self.d_model = d_model
         self.use_pretrained = use_pretrained
@@ -152,10 +152,12 @@ class CBraMod(BaseModel):
         else:
             self.apply(_weights_init)
 
-        # Taken from TUEV
-        #self.num_patches = self.time_steps // d_model
-        self.num_patches = 5
-        classifier = 'avgpooling_patch_reps' # CHECK WHICH ONE
+        self.num_patches = num_patches
+        if self.num_patches is None:
+            patch_count = self.time_steps // d_model
+        else:
+            patch_count = self.num_patches
+
         if classifier == 'avgpooling_patch_reps':
             self.classifier = nn.Sequential(
                 Rearrange('b c s d -> b d c s'),
@@ -166,12 +168,12 @@ class CBraMod(BaseModel):
         elif classifier == 'all_patch_reps_onelayer':
             self.classifier = nn.Sequential(
                 Rearrange('b c s d -> b (c s d)'),
-                nn.Linear(self.num_electrodes * self.num_patches * self.d_model, self.num_classes),
+                nn.Linear(self.num_electrodes * patch_count * self.d_model, self.num_classes),
             )
         elif classifier == 'all_patch_reps_twolayer':
             self.classifier = nn.Sequential(
                 Rearrange('b c s d -> b (c s d)'),
-                nn.Linear(self.num_electrodes * self.num_patches * self.d_model, self.d_model),
+                nn.Linear(self.num_electrodes * patch_count * self.d_model, self.d_model),
                 nn.ELU(),
                 nn.Dropout(dropout),
                 nn.Linear(self.d_model, self.num_classes),
@@ -179,10 +181,10 @@ class CBraMod(BaseModel):
         elif classifier == 'all_patch_reps':
             self.classifier = nn.Sequential(
                 Rearrange('b c s d -> b (c s d)'),
-                nn.Linear(self.num_electrodes * self.num_patches * self.d_model, self.num_patches * self.d_model),
+                nn.Linear(self.num_electrodes * patch_count * self.d_model, patch_count * self.d_model),
                 nn.ELU(),
                 nn.Dropout(dropout),
-                nn.Linear(self.num_patches * self.d_model, self.d_model),
+                nn.Linear(patch_count * self.d_model, self.d_model),
                 nn.ELU(),
                 nn.Dropout(dropout),
                 nn.Linear(self.d_model, self.num_classes),
@@ -214,7 +216,7 @@ class CBraMod(BaseModel):
             return eeg.view(B, C, num_patches, patch_length)
         
         # This is my own idea, it's not from CBraMod
-        def patchify_eeg_overlap(eeg: torch.Tensor, num_patches: int, patch_length: int) -> torch.Tensor:
+        def patchify_eeg_overlap(eeg: torch.Tensor, num_patches: int, patch_length: int = 200) -> torch.Tensor:
             """
             Splits (B, C, T) into (B, C, P, patch_length) with P = num_patches,
             using overlapping windows equally spaced across the time axis.
@@ -239,9 +241,11 @@ class CBraMod(BaseModel):
 
             return torch.cat(patches, dim=2)              # → (B, C, num_patches, patch_length)
         
-        
-        x = patchify_eeg(batch['eeg'], patch_length=self.d_model)
-        #x = patchify_eeg_overlap(batch['eeg'], num_patches=self.num_patches, patch_length=self.d_model)
+        eeg = batch['eeg']
+        if self.num_patches is None:
+            x = patchify_eeg(eeg, patch_length=self.d_model)
+        else:
+            x = patchify_eeg_overlap(eeg, num_patches=self.num_patches, patch_length=self.d_model)
 
         patch_emb = self.patch_embedding(x)
         feats = self.encoder(patch_emb)

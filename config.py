@@ -249,9 +249,11 @@ MODEL_CONFIGS = [
             "clip_value": 1,
             "use_pretrained": True,
             "d_model": 200,
-            "dim_feedforward": 800, #400
-            "n_layer": 12, #4
-            "nhead": 8, #4
+            "dim_feedforward": 800,  # 400
+            "n_layer": 12,  # 4
+            "nhead": 8,  # 4
+            "classifier": "all_patch_reps",  # This seems to be original one, although stated params count in paper suggests avgpooling_patch_reps
+            "num_patches": None,  # Or number if overlapping patches should be used
         },
         "pretraining": False,
         "use_images": False,
@@ -266,7 +268,7 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "Kaneshiro",
+        "dataset": "EEGImageNet",
         "model": "CBraMod",
     },
     # Add more combinations as desired...
