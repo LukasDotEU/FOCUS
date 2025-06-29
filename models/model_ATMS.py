@@ -358,7 +358,6 @@ class ATMS(BaseModel):
     # make sure that order of all_center is THE SAME as the order of labels
     def predict(self, batch):
         subject_ids = batch['subject']
-        labels = batch['class_idx']
         eeg = batch['eeg']  # [B, C, T]
 
         eeg_features = self.encoder(eeg, subject_ids)
@@ -366,7 +365,7 @@ class ATMS(BaseModel):
         eeg_projection = self.proj_eeg(eeg_embedding)
         
         preds, scores = self.compute_predictions(eeg_projection)
-        return preds, labels, scores
+        return preds, scores
     
     def compute_predictions(self, eeg_features):
         # eeg_features through list with img_features or just eeg_features is dirty hack to compute predictions

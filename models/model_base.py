@@ -50,9 +50,7 @@ class BaseModel(nn.Module):
     
     def compute_predictions(self, logits_or_eegfeatures):
         """
-        Runs inference on a batch (in eval mode) and returns:
-          - preds: Tensor of shape [batch_size] (int labels);
-          - optionally: confidence scores or embeddings.
+        Compute predictions on output of forward (in eval mode)
         """
         raise NotImplementedError
     
@@ -121,9 +119,8 @@ class BaseModel(nn.Module):
 
     def evaluate_on_dataloader(self, dataloader, evaluator: Evaluator):
         """
-        Runs inference over the dataloader, collects predictions, labels,
-        (and optionally scores or embeddings) and uses the evaluator
-        to compute and return metrics as a dict.
+        Runs inference over the dataloader, collects predictions, labels, and scores 
+        and uses the evaluator to compute and return metrics as a dict.
         """
         self.eval()
         all_preds = []
@@ -137,10 +134,10 @@ class BaseModel(nn.Module):
                     if isinstance(value, torch.Tensor):
                         batch[key] = value.to(self.device, non_blocking=True)
 
-                # Expect predict() to return a tuple: (preds, labels, scores)
-                preds, labels, scores = self.predict(batch)
+                # Expect predict() to return a tuple: (preds, scores)
+                preds, scores = self.predict(batch)
                 all_preds.append(preds.cpu())
-                all_labels.append(labels.cpu())
+                all_labels.append(batch['class_idx'])
                 if scores is not None:
                     all_scores.append(scores.cpu())
 
