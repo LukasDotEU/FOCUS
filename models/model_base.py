@@ -44,19 +44,21 @@ class BaseModel(nn.Module):
 
     def predict(self, batch: dict):
         """
-        Runs inference on a batch (in eval mode) and returns:
-          - preds: Tensor of shape [batch_size] (int labels);
-          - optionally: confidence scores or embeddings.
+        Runs inference on a batch (in eval mode)
         """
         raise NotImplementedError
     
     def compute_predictions(self, logits_or_eegfeatures):
         """
-        Runs inference on a batch (in eval mode) and returns:
-          - preds: Tensor of shape [batch_size] (int labels);
-          - optionally: confidence scores or embeddings.
+        Compute predictions on output of forward (in eval mode)
         """
         raise NotImplementedError
+    
+    def optimize(self) -> None:
+        """
+        run optimizer steps
+        """
+        self.optimizer.step()
 
     def count_params(self):
         """
@@ -83,14 +85,14 @@ class BaseModel(nn.Module):
             # Move tensors to the correct device.
             for key, value in batch.items():
                 if isinstance(value, torch.Tensor):
-                    batch[key] = value.to(self.device)
+                    batch[key] = value.to(self.device, non_blocking=True)
 
             # TODO: check order of zero_grad and forward
             self.optimizer.zero_grad()
             output = self.forward(batch)
             loss = self.compute_loss(batch, output)
             loss.backward()
-            self.optimizer.step()
+            self.optimize()
 
             running_loss += loss.item()
             n_batches += 1
@@ -117,39 +119,40 @@ class BaseModel(nn.Module):
 
     def evaluate_on_dataloader(self, dataloader, evaluator: Evaluator):
         """
-        Runs inference over the dataloader, collects predictions, labels,
-        (and optionally scores or embeddings) and uses the evaluator
-        to compute and return metrics as a dict.
+        Runs inference over the dataloader, collects predictions, labels, and scores 
+        and uses the evaluator to compute and return metrics as a dict.
         """
         self.eval()
+        running_loss = 0.0
+        n_batches = 0
+
         all_preds = []
         all_labels = []
-        all_scores = []    # e.g., softmax probabilities or cosine scores
-        all_embeddings = []
-        all_subjects = []
+        all_scores = []    # e.g., softmax probabilities
 
         with torch.no_grad():
             for batch in dataloader:
                 # Move tensors to the target device.
                 for key, value in batch.items():
                     if isinstance(value, torch.Tensor):
-                        batch[key] = value.to(self.device)
+                        batch[key] = value.to(self.device, non_blocking=True)
 
-                # Expect predict() to return a tuple: (preds, labels, scores (optional), embeddings (optional), subjects)
-                preds, labels, scores, embeddings, subjects = self.predict(batch)
-                all_preds.append(preds.cpu())
-                all_labels.append(labels.cpu())
+                # Expect predict() to return a tuple: (preds, scores, loss)
+                # TODO: refactor to do forward in here and give output to compute metrics and computer loss
+                preds, scores, loss = self.predict(batch)
+
+                running_loss += loss.item()
+                n_batches += 1
+
+                all_preds.append(preds)
+                all_labels.append(batch['class_idx'])
                 if scores is not None:
-                    all_scores.append(scores.cpu())
-                if embeddings is not None:
-                    all_embeddings.append(embeddings.cpu())
-                all_subjects.extend(subjects)
+                    all_scores.append(scores)
 
         # Concatenate tensors and convert to numpy arrays when applicable.
-        all_preds = torch.cat(all_preds).numpy()
-        all_labels = torch.cat(all_labels).numpy()
-        all_scores = torch.cat(all_scores).numpy() if all_scores else None
-        all_embeddings = torch.cat(all_embeddings).numpy() if all_embeddings else None
+        all_preds = torch.cat(all_preds).cpu().numpy()
+        all_labels = torch.cat(all_labels).cpu().numpy()
+        all_scores = torch.cat(all_scores).cpu().numpy() if all_scores else None
 
         results = evaluator.compute_metrics(
             y_true=all_labels,
@@ -157,4 +160,5 @@ class BaseModel(nn.Module):
             y_score=all_scores
         )
 
-        return results
+        avg_loss = running_loss / n_batches
+        return avg_loss, results

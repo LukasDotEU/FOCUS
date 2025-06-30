@@ -33,6 +33,7 @@ This repository implements several methods for evaluating EEG signals in combina
   - [`model_NiceEEG.py`](models/model_NiceEEG.py): NICE-EEG model adapted from the NICE-EEG repository.
   - [`model_ATMS.py`](models/model_ATMS.py): **[EXPERIMENTAL]** ATMS model adapted from the ATMS repository.
   - [`model_CAWMASASTST.py`](models/model_CAWMASASTST.py): CAWMASASTST model adapted from the CAWMASASTST repository.
+  - [`model_CBraMod.py`](models/model_CBraMod.py): CBraMod model adapted from the CBraMod repository. This requires checkpoint weights (`models/model_CBraMod_pretrained_weights.pth`) if using pretrained. These can be found via the origCBraMod repository.
 
 - **feature_preprocessing/**  
   Contains feature preprocessing scripts:
@@ -120,6 +121,14 @@ This script will:
 - Train models (e.g., [`EEGNet`](models/model_EEGNet.py), [`EEGChannelNet`](models/model_EEGChannelNet.py), [`NiceEEG`](models/model_NiceEEG.py), ...) with specified hyperparameters.
 - Compute and log metrics using [`Evaluator`](utils/metrics.py) and time each phase with [`Timer`](utils/timers.py).
 - Save results to `evaluation_summary.csv`.
+
+### Slurm Script running
+
+Run the main slurm script to execute the entire training and evaluation pipeline in a detached slurm job:
+
+```sh
+sbatch main.sh
+```
 
 
 ## Preprocessing

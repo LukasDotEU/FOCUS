@@ -1,2 +1,10 @@
 __pycache__/
 .cache/
+
+testing_model_weights/
+model_weights/
+
+wandb/
+slurm_outputs/
+
+*.pth
