@@ -144,15 +144,15 @@ class BaseModel(nn.Module):
                 running_loss += loss.item()
                 n_batches += 1
 
-                all_preds.append(preds.cpu())
+                all_preds.append(preds)
                 all_labels.append(batch['class_idx'])
                 if scores is not None:
-                    all_scores.append(scores.cpu())
+                    all_scores.append(scores)
 
         # Concatenate tensors and convert to numpy arrays when applicable.
-        all_preds = torch.cat(all_preds).numpy()
-        all_labels = torch.cat(all_labels).numpy()
-        all_scores = torch.cat(all_scores).numpy() if all_scores else None
+        all_preds = torch.cat(all_preds).cpu().numpy()
+        all_labels = torch.cat(all_labels).cpu().numpy()
+        all_scores = torch.cat(all_scores).cpu().numpy() if all_scores else None
 
         results = evaluator.compute_metrics(
             y_true=all_labels,
