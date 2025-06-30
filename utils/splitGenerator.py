@@ -70,7 +70,7 @@ class SplitGenerator:
             train_idx = sub_meta[sub_meta['image_idx'].isin(train_set)]['idx'].tolist()
             test_idx  = sub_meta[sub_meta['image_idx'].isin(test_set)]['idx'].tolist()
 
-            splits.append({'name': f'per_subject_{sid}', 'train_idx': train_idx, 'test_idx': test_idx})
+            splits.append({'name': f'per_subject_{sid}', 'type': 'per_subject', 'train_idx': train_idx, 'test_idx': test_idx})
             print(f"per_subject_{sid}: {len(train_idx)} train / {len(test_idx)} test")
         return splits
 
@@ -87,6 +87,7 @@ class SplitGenerator:
             train_idx = list(all_indices.difference(test_idx))
             splits.append({
                 'name': f'cross_subject_LOSO_{sid}',
+                'type': 'cross_subject',
                 'train_idx': train_idx,
                 'test_idx': test_idx
             })
@@ -114,6 +115,7 @@ class SplitGenerator:
 
             splits.append({
                 'name': f'all_subjects_CV_fold_{fold_id}',
+                'type': 'CV',
                 'train_idx': train_idx,
                 'test_idx': test_idx
             })

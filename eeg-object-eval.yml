@@ -21,3 +21,4 @@ dependencies:
       - transformers
       - open-clip-torch
       - PyWavelets
+      - wandb

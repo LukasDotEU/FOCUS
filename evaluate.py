@@ -6,6 +6,7 @@ import random
 import numpy as np
 import pandas as pd
 from torch.utils.data import DataLoader, Subset
+import wandb
 
 # Import base model class
 from datasets.base_dataset import BaseEEGDataset
@@ -129,6 +130,23 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
         print(f"[{split_name}] Initialized model '{model_name}' with '{ds_conf['name']}'")
         print(f"[{split_name}] total_params={total_params}, trainable_params={trainable_params}")
 
+        # Prepare wandb config
+        wandb_config = {
+            "dataset": dataset_conf['name'],
+            "dataset_conf": {k: v for k, v in dataset_conf.items() if k != 'class'},
+            "model": model_conf['name'],
+            "model_conf": {k: v for k, v in model_conf.items() if k != 'class'},
+            "split_name": split_name,
+            "split_type": split['type'],
+            "total_params": total_params,
+            "trainable_params": trainable_params,
+        }
+        wandb.init(
+            project="eeg-object-eval",
+            name=f"{dataset_conf['name']}_{model_conf['name']}_{split_name}",
+            config=wandb_config,
+        )
+
         evaluator = Evaluator(average='macro')
         best_val_score = -float('inf')
         best_epoch = -1
@@ -158,6 +176,25 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
                 f"val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})"
             )
 
+            wandb.log({
+                "epoch": epoch + 1,
+                "train_loss": avg_train_loss,
+                "train_accuracy": train_metrics['accuracy'],
+                "train_f1": train_metrics['f1'],
+                "train_precision": train_metrics['precision'],
+                "train_recall": train_metrics['recall'],
+                "train_cohen_kappa": train_metrics['cohen_kappa'],
+                "train_auc": train_metrics['auc'],
+                "train_time_sec": train_time,
+                "val_loss": avg_val_loss,
+                "val_accuracy": val_metrics['accuracy'],
+                "val_f1": val_metrics['f1'],
+                "val_precision": val_metrics['precision'],
+                "val_recall": val_metrics['recall'],
+                "val_cohen_kappa": val_metrics['cohen_kappa'],
+                "val_auc": val_metrics['auc'],
+            })
+
         # Reload best weights
         if best_state is not None:
             model.load_state_dict(best_state)
@@ -167,6 +204,33 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
         with Timer() as t_test:
             avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator)
         test_time = t_test.elapsed
+
+        # Prepare test metrics as a wandb.Table
+        test_table = wandb.Table(
+            columns=[
+                "model_name", "dataset_name", "split_type", "split_name",
+                "test_loss", "test_accuracy", "test_f1", "test_precision", "test_recall",
+                "test_cohen_kappa", "test_auc", "test_time_sec", "best_epoch"
+            ],
+            data=[[
+                model_conf['name'],
+                dataset_conf['name'],
+                split['type'],
+                split_name,
+                avg_test_loss,
+                test_metrics['accuracy'],
+                test_metrics['f1'],
+                test_metrics['precision'],
+                test_metrics['recall'],
+                test_metrics['cohen_kappa'],
+                test_metrics['auc'],
+                test_time,
+                best_epoch + 1,
+            ]]
+        )
+        wandb.log({"test_metrics_table": test_table})
+        wandb.log({"best_epoch": best_epoch + 1})
+        wandb.finish()
 
         # Checkpoint: save from best epoch
         checkpoint = {
