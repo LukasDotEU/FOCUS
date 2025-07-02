@@ -3,6 +3,7 @@ import argparse
 import scipy.io
 import torch
 import pandas as pd
+import concurrent.futures
 
 import sys
 # ensure local package import works when running as script
@@ -108,20 +109,32 @@ class Kaneshiro(BaseEEGDataset):
         use_original: if True, loads from the 'original' folder; else 'updated'.
     """
     def __init__(self, eeg_root: str, images_root: str, use_original: bool,
-                 use_images: bool = False, images_file: str = None, use_cwt: bool = False):
+                 use_images: bool = False, images_file: str = None, use_cwt: bool = False, pre_load: bool = True):
         super().__init__(eeg_root=eeg_root, images_root=images_root,
-                         use_images=use_images, images_file=images_file, use_cwt=use_cwt)
+                         use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         self.use_original = use_original
 
         mode = 'original' if self.use_original else 'updated'
         samples_dir = os.path.join(self.eeg_root, f'kaneshiro{mode}_individual_pt')
         meta_path = os.path.join(samples_dir, 'metadata.csv')
         self.metadata = pd.read_csv(meta_path)
+        self.metadata = (self.metadata.sort_values('idx').set_index('idx', drop=False))  # Ensure sorted by idx
         self.samples_dir = samples_dir
 
-        self.eeg_cache = {}
+        # Precompute ordered list of filepaths (and CWT names if needed)
+        self._filepaths = self.metadata['filepath'].tolist()
         if self.use_cwt:
-            self.cwt_cache = {}
+            self._cwt_paths = ["cwt_" + fp for fp in self._filepaths]
+
+        if self.pre_load:
+            def load_pt(fname):
+                return torch.load(os.path.join(self.samples_dir, fname))
+            # Pre-load all EEG data
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filepaths))
+            if self.use_cwt:
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    self.cwt_data = list(executor.map(load_pt, self._cwt_paths))
 
         if self.use_images:
             self.images = torch.load(os.path.join(self.images_root, self.images_file), weights_only=False)
@@ -143,23 +156,24 @@ class Kaneshiro(BaseEEGDataset):
         """
         row = self.metadata.iloc[idx]  # Get the row for this index
 
-        if idx not in self.eeg_cache:
-            eeg_path = os.path.join(self.samples_dir, row['filepath'])
-            self.eeg_cache[idx] = torch.load(eeg_path)
-
+        if self.pre_load:
+            eeg = self.eeg_data[idx]
             if self.use_cwt:
-                cwt_path = os.path.join(self.samples_dir, "cwt_" + row['filepath'])
-                self.cwt_cache[idx] = torch.load(cwt_path)
+                cwt = self.cwt_data[idx]
+        else:
+            eeg = torch.load(os.path.join(self.samples_dir, row['filepath']))
+            if self.use_cwt:
+                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filepath']))
         
         sample = {
-            'eeg': self.eeg_cache[idx],
+            'eeg': eeg,
             'class_idx': int(row['class_idx']),
             'image_idx': int(row['image_idx']),
             'subject': int(row['subject'])
         }
 
         if self.use_cwt:
-            sample['cwt'] = self.cwt_cache[idx]
+            sample['cwt'] = cwt
 
         if self.use_images:
             feat = self.images[str(sample['class_idx'] + 1)][str(sample['image_idx'] + 1)]
