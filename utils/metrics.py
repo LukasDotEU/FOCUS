@@ -1,5 +1,7 @@
+from sklearn.calibration import label_binarize
 from sklearn.metrics import (
     accuracy_score,
+    balanced_accuracy_score,
     f1_score,
     precision_score,
     recall_score,
@@ -20,41 +22,42 @@ class Evaluator:
         """
         self.average = average
 
-    def compute_metrics(self, y_true, y_pred, y_score=None):
+    def compute_metrics(self, y_true, y_pred, y_score=None, compute_auc=False):
         """
         y_true: np.array [N]
         y_pred: np.array [N]
         y_score: np.array [N, num_classes] or None
         Returns a dict with:
-          - accuracy, f1, precision, recall, cohen_kappa, auc (if y_score not None)
+          - accuracy, balanced_acc, f1, precision, recall, cohen_kappa, auc (if compute_auc=True and y_score not None)
         """
         results = {}
         results['accuracy'] = accuracy_score(y_true, y_pred)
+        results['balanced_acc'] = balanced_accuracy_score(y_true, y_pred)
         results['f1'] = f1_score(y_true, y_pred, average=self.average)
         results['precision'] = precision_score(y_true, y_pred, average=self.average, zero_division=0)
         results['recall'] = recall_score(y_true, y_pred, average=self.average, zero_division=0)
         results['cohen_kappa'] = cohen_kappa_score(y_true, y_pred)
 
-        if y_score is not None:
+        # AUC should only be computed once at end of epoch for test set as quite computationally expensive
+        if compute_auc and y_score is not None:
             # For multiclass AUC, use one-vs-rest (requires binary indicator matrix)
             try:
-                # First, binarize y_true
+                # Efficiently build binary indicator matrix
                 classes = np.unique(y_true)
-                # If fewer classes than columns in y_score, we assume the columns correspond
-                # to sorted classes. Else, raise an error.
-                n_classes = y_score.shape[1]
-                if len(classes) != n_classes:
-                    # We can optionally do label_binarize, but we assume classes are 0..C-1
-                    pass
-                y_true_bin = np.zeros((y_true.size, n_classes))
-                for i, c in enumerate(classes):
-                    y_true_bin[:, i] = (y_true == c).astype(int)
+                y_true_bin = label_binarize(y_true, classes=classes)
+
+                # If y_score columns mismatch, ensure alignment
+                if y_true_bin.shape[1] != y_score.shape[1]:
+                    raise ValueError(
+                        f"Mismatch: got {y_score.shape[1]} score columns for {y_true_bin.shape[1]} classes"
+                    )
                 # Compute multiclass AUC using one-vs-rest
                 auc_val = roc_auc_score(y_true_bin, y_score, average=self.average, multi_class='ovr')
             except Exception:
-                auc_val = float('nan')
+                auc_val = np.nan
+
             results['auc'] = auc_val
         else:
-            results['auc'] = float('nan')
+            results['auc'] = np.nan
 
         return results

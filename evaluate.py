@@ -31,7 +31,7 @@ def set_seed(seed=42):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
+def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, testing: bool = False):
     """
     Workflow per (dataset, model):
       1) Load entire dataset → get outer_train_idx, outer_test_idx (per-subject, all-subjects, or LOSO).
@@ -145,6 +145,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
             project="eeg-object-eval",
             name=f"{dataset_conf['name']}_{model_conf['name']}_{split_name}",
             config=wandb_config,
+            mode="disabled" if testing else "online",
         )
 
         evaluator = Evaluator(average='macro')
@@ -180,19 +181,19 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
                 "epoch": epoch + 1,
                 "train_loss": avg_train_loss,
                 "train_accuracy": train_metrics['accuracy'],
+                "train_balanced_acc": train_metrics['balanced_acc'],
                 "train_f1": train_metrics['f1'],
                 "train_precision": train_metrics['precision'],
                 "train_recall": train_metrics['recall'],
                 "train_cohen_kappa": train_metrics['cohen_kappa'],
-                "train_auc": train_metrics['auc'],
                 "train_time_sec": train_time,
                 "val_loss": avg_val_loss,
                 "val_accuracy": val_metrics['accuracy'],
+                "val_balanced_acc": val_metrics['balanced_acc'],
                 "val_f1": val_metrics['f1'],
                 "val_precision": val_metrics['precision'],
                 "val_recall": val_metrics['recall'],
                 "val_cohen_kappa": val_metrics['cohen_kappa'],
-                "val_auc": val_metrics['auc'],
             })
 
         # Reload best weights
@@ -202,14 +203,14 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
 
         # Final evaluation on test set
         with Timer() as t_test:
-            avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator)
+            avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator, compute_auc=True)
         test_time = t_test.elapsed
 
         # Prepare test metrics as a wandb.Table
         test_table = wandb.Table(
             columns=[
                 "model_name", "dataset_name", "split_type", "split_name",
-                "test_loss", "test_accuracy", "test_f1", "test_precision", "test_recall",
+                "test_loss", "test_accuracy", "test_balanced_acc", "test_f1", "test_precision", "test_recall",
                 "test_cohen_kappa", "test_auc", "test_time_sec", "best_epoch"
             ],
             data=[[
@@ -219,6 +220,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
                 split_name,
                 avg_test_loss,
                 test_metrics['accuracy'],
+                test_metrics['balanced_acc'],
                 test_metrics['f1'],
                 test_metrics['precision'],
                 test_metrics['recall'],
@@ -257,22 +259,23 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str):
             'test_time_sec': test_time,
             # train metrics at best val
             'train_accuracy': best_val_train_metrics['accuracy'],
+            'train_balanced_acc': best_val_train_metrics['balanced_acc'],
             'train_f1': best_val_train_metrics['f1'],
             'train_precision': best_val_train_metrics['precision'],
             'train_recall': best_val_train_metrics['recall'],
             'train_cohen_kappa': best_val_train_metrics['cohen_kappa'],
-            'train_auc': best_val_train_metrics['auc'],
             'train_loss': avg_train_loss,
             # validation metrics
             'val_accuracy': best_val_metrics['accuracy'],
+            'val_balanced_acc': best_val_metrics['balanced_acc'],
             'val_f1': best_val_metrics['f1'],
             'val_precision': best_val_metrics['precision'],
             'val_recall': best_val_metrics['recall'],
             'val_cohen_kappa': best_val_metrics['cohen_kappa'],
-            'val_auc': best_val_metrics['auc'],
             'val_loss': avg_val_loss,
             # test metrics
             'test_accuracy': test_metrics['accuracy'],
+            'test_balanced_acc': test_metrics['balanced_acc'],
             'test_f1': test_metrics['f1'],
             'test_precision': test_metrics['precision'],
             'test_recall': test_metrics['recall'],
@@ -321,7 +324,7 @@ if __name__ == '__main__':
             **ds_conf.get('model_args', {}).get(combo['model'], {})
         })
 
-        res = train_and_evaluate(ds_conf, m_conf, base_dir)
+        res = train_and_evaluate(ds_conf, m_conf, base_dir, args.testing)
         all_results.extend(res)
 
     df_results = pd.DataFrame(all_results)
