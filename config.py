@@ -128,16 +128,18 @@ DATASET_CONFIGS = [
 # All available model configurations.
 MODEL_CONFIGS = [
     # KaneshiroOriginal: 16 -> 6; Kaneshiro: 320 -> 6;EEGImageNet: 208 -> 40; ThingsEEG2: 624 -> 1654
-    {
+    {  # NOTE: Using hyperparameters from "Image classification and reconstruction from low-density EEG"
+        # with MaxPooling instead of average. Not using any other model altercations done as not documented enough/unclear.
         "name": "EEGNet",
         "class": EEGNet,
         "args": {
-            "F1": 8,
-            "F2": 16,
+            "F1": 64,
+            "F2": 128,  # F1*D=64*2=128
             "D": 2,
             "kernel_1": 64,
             "kernel_2": 16,
             "dropout": 0.25,
+            "momentum": 0.1,
             "learning_rate": 1e-3,
         },
         "pretraining": False,
@@ -268,8 +270,20 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
+        "dataset": "ThingsEEG2",
+        "model": "EEGNet",
+    },
+    {
         "dataset": "EEGImageNet",
-        "model": "CBraMod",
+        "model": "EEGChannelNet",
+    },
+    {
+        "dataset": "Kaneshiro",
+        "model": "EEGChannelNet",
+    },
+    {
+        "dataset": "ThingsEEG2",
+        "model": "EEGChannelNet",
     },
     # Add more combinations as desired...
 ]
