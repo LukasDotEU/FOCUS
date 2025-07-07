@@ -4,7 +4,6 @@ import argparse
 import torch
 import random
 import numpy as np
-import pandas as pd
 from torch.utils.data import DataLoader, Subset
 import wandb
 
@@ -247,44 +246,6 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         ckpt_path = os.path.join(run_dir, f'{split_name}.pt')
         torch.save(checkpoint, ckpt_path)
 
-        # Record summary
-        row = {
-            'dataset': dataset_conf['name'],
-            'model': model_conf['name'],
-            'split_name': split_name,
-            'total_params': total_params,
-            'trainable_params': trainable_params,
-            'best_epoch': best_epoch + 1,
-            'train_time_sec': train_time,
-            'test_time_sec': test_time,
-            # train metrics at best val
-            'train_accuracy': best_val_train_metrics['accuracy'],
-            'train_balanced_acc': best_val_train_metrics['balanced_acc'],
-            'train_f1': best_val_train_metrics['f1'],
-            'train_precision': best_val_train_metrics['precision'],
-            'train_recall': best_val_train_metrics['recall'],
-            'train_cohen_kappa': best_val_train_metrics['cohen_kappa'],
-            'train_loss': avg_train_loss,
-            # validation metrics
-            'val_accuracy': best_val_metrics['accuracy'],
-            'val_balanced_acc': best_val_metrics['balanced_acc'],
-            'val_f1': best_val_metrics['f1'],
-            'val_precision': best_val_metrics['precision'],
-            'val_recall': best_val_metrics['recall'],
-            'val_cohen_kappa': best_val_metrics['cohen_kappa'],
-            'val_loss': avg_val_loss,
-            # test metrics
-            'test_accuracy': test_metrics['accuracy'],
-            'test_balanced_acc': test_metrics['balanced_acc'],
-            'test_f1': test_metrics['f1'],
-            'test_precision': test_metrics['precision'],
-            'test_recall': test_metrics['recall'],
-            'test_cohen_kappa': test_metrics['cohen_kappa'],
-            'test_auc': test_metrics['auc'],
-            'test_loss': avg_test_loss,
-        }
-        results.append(row)
-
         print(
             f"[{split_name}] Test results → "
             f"Acc: {test_metrics['accuracy']:.4f}, F1: {test_metrics['f1']:.4f}, "
@@ -297,8 +258,6 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         del model
         torch.cuda.empty_cache()
 
-    return results
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate models with checkpointing')
@@ -308,7 +267,6 @@ if __name__ == '__main__':
     base_dir = 'testing_model_weights' if args.testing else 'model_weights'
     os.makedirs(base_dir, exist_ok=True)
 
-    all_results = []
     # Iterate over selected configuration combinations.
     for combo in SELECTED_CONFIGS:
         # Retrieve dataset configuration.
@@ -324,10 +282,6 @@ if __name__ == '__main__':
             **ds_conf.get('model_args', {}).get(combo['model'], {})
         })
 
-        res = train_and_evaluate(ds_conf, m_conf, base_dir, args.testing)
-        all_results.extend(res)
+        train_and_evaluate(ds_conf, m_conf, base_dir, args.testing)
 
-    df_results = pd.DataFrame(all_results)
-    out_csv = os.path.join(base_dir, 'evaluation_summary.csv')
-    df_results.to_csv(out_csv, index=False)
-    print(f"Evaluation finished. Summary saved to {out_csv}")
+    print(f"Evaluation finished.")
