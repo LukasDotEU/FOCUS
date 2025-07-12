@@ -22,13 +22,14 @@ class BaseEEGDataset(Dataset):
            'cwt'      : torch.Tensor or None (if cwt not used)
     """
 
-    def __init__(self, eeg_root: str, images_root: str, use_images: bool, images_file:str, use_cwt: bool):
+    def __init__(self, eeg_root: str, images_root: str, use_images: bool, images_file:str, use_cwt: bool, pre_load: bool):
         super().__init__()
         self.eeg_root = eeg_root
         self.images_root = images_root
         self.use_images = use_images
         self.images_file = images_file
         self.use_cwt = use_cwt
+        self.pre_load = pre_load
 
         # Subclasses must create a DataFrame with columns ['idx', 'subject', 'filepath', 'class_idx', 'image_idx']
         self.metadata = pd.DataFrame(columns=['idx', 'subject', 'filepath', 'class_idx', 'image_idx'])

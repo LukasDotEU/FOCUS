@@ -81,6 +81,7 @@ class EEGNet(BaseModel):
                     kernel_1: int = 64,
                     kernel_2: int = 16,
                     dropout: float = 0.25,
+                    momentum: float = 0.01,
                     learning_rate: float = 1e-3):
         # Save hyperparameters.
         self.chunk_size = time_steps
@@ -91,12 +92,13 @@ class EEGNet(BaseModel):
         self.kernel_1 = kernel_1
         self.kernel_2 = kernel_2
         self.dropout = dropout
+        self.momentum = momentum
         self.learning_rate = learning_rate
 
         # Block 1: Temporal convolution and depthwise spatial convolution.
         self.block1 = nn.Sequential(
             nn.Conv2d(1, self.F1, (1, self.kernel_1), stride=1, padding=(0, self.kernel_1 // 2), bias=False),
-            nn.BatchNorm2d(self.F1, momentum=0.01, affine=True, eps=1e-3),
+            nn.BatchNorm2d(self.F1, momentum=self.momentum, affine=True, eps=1e-3),
             Conv2dWithConstraint(self.F1,
                                  self.F1 * self.D, (self.num_electrodes, 1),
                                  max_norm=1,
@@ -104,9 +106,9 @@ class EEGNet(BaseModel):
                                  padding=(0, 0),
                                  groups=self.F1,
                                  bias=False),
-            nn.BatchNorm2d(self.F1 * self.D, momentum=0.01, affine=True, eps=1e-3),
+            nn.BatchNorm2d(self.F1 * self.D, momentum=self.momentum, affine=True, eps=1e-3),
             nn.ELU(),
-            nn.AvgPool2d((1, 4), stride=4),
+            nn.MaxPool2d((1, 4), stride=4),
             nn.Dropout(self.dropout)
         )
 
@@ -119,9 +121,9 @@ class EEGNet(BaseModel):
                       bias=False,
                       groups=self.F1 * self.D),
             nn.Conv2d(self.F1 * self.D, self.F2, 1, padding=(0, 0), groups=1, bias=False, stride=1),
-            nn.BatchNorm2d(self.F2, momentum=0.01, affine=True, eps=1e-3),
+            nn.BatchNorm2d(self.F2, momentum=self.momentum, affine=True, eps=1e-3),
             nn.ELU(),
-            nn.AvgPool2d((1, 8), stride=8),
+            nn.MaxPool2d((1, 8), stride=8),
             nn.Dropout(self.dropout)
         )
 

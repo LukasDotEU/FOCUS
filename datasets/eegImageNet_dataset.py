@@ -2,6 +2,7 @@ import os
 import argparse
 import pandas as pd
 import torch
+import concurrent.futures
 
 import sys
 # ensure local package import works when running as script
@@ -67,7 +68,7 @@ def preprocess(pth_file: str, eeg_root: str):
 
 class EEGImageNet(BaseEEGDataset):
     def __init__(self, eeg_root: str, pth_file: str, images_root: str, 
-                 use_images: bool = False, images_file: bool = None, use_cwt: bool = False):
+                 use_images: bool = False, images_file: bool = None, use_cwt: bool = False, pre_load: bool = True):
         """
         PyTorch Dataset for preprocessed EEGImageNet samples.
 
@@ -80,19 +81,31 @@ class EEGImageNet(BaseEEGDataset):
         use_images: if False, __getitem__ returns no image
         """
         super().__init__(eeg_root=eeg_root, images_root=images_root, 
-                         use_images=use_images, images_file=images_file, use_cwt=use_cwt)
+                         use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         self.pth_file = pth_file
 
         self.samples_dir = os.path.join(self.eeg_root, PTH_FILE_DIR[self.pth_file])
         self.metadata = pd.read_csv(os.path.join(self.samples_dir, 'metadata.csv'))
+        self.metadata = (self.metadata.sort_values('idx').set_index('idx', drop=False))  # Ensure sorted by idx
 
         # load saved labels
         self.class_labels = torch.load(os.path.join(self.samples_dir, 'class_labels.pt'))
         self.image_labels = torch.load(os.path.join(self.samples_dir, 'image_labels.pt'))
 
-        self.eeg_cache = {}
+        # Precompute ordered list of filepaths (and CWT names if needed)
+        self._filepaths = self.metadata['filepath'].tolist()
         if self.use_cwt:
-            self.cwt_cache = {}
+            self._cwt_paths = ["cwt_" + fp for fp in self._filepaths]
+
+        if self.pre_load:
+            def load_pt(fname):
+                return torch.load(os.path.join(self.samples_dir, fname))
+            # Pre-load all EEG data
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filepaths))
+            if self.use_cwt:
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    self.cwt_data = list(executor.map(load_pt, self._cwt_paths))
 
         if self.use_images:
             self.images = torch.load(os.path.join(self.images_root, self.images_file), weights_only=False)
@@ -114,23 +127,24 @@ class EEGImageNet(BaseEEGDataset):
         """
         row = self.metadata.iloc[idx]
 
-        if idx not in self.eeg_cache:
-            eeg_path = os.path.join(self.samples_dir, row['filepath'])
-            self.eeg_cache[idx] = torch.load(eeg_path)
-
+        if self.pre_load:
+            eeg = self.eeg_data[idx]
             if self.use_cwt:
-                cwt_path = os.path.join(self.samples_dir, "cwt_" + row['filepath'])
-                self.cwt_cache[idx] = torch.load(cwt_path)
+                cwt = self.cwt_data[idx]
+        else:
+            eeg = torch.load(os.path.join(self.samples_dir, row['filepath']))
+            if self.use_cwt:
+                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filepath']))
 
         sample = {
-            'eeg': self.eeg_cache[idx],
+            'eeg': eeg,
             'class_idx': int(row['class_idx']),
             'image_idx': int(row['image_idx']),
             'subject': int(row['subject'])
         }
 
         if self.use_cwt:
-            sample['cwt'] = self.cwt_cache[idx]
+            sample['cwt'] = cwt
 
         if self.use_images:
             # lookup using loaded label lists

@@ -29,7 +29,7 @@ class GCN(nn.Module):
         self.Theta=nn.Parameter(torch.randn((self.k,feas, self.num_of_filters)))
         self.adj=None
     def forward(self, x):
-        x = x.squeeze()
+        x = x.squeeze(2)
         b, c, l = x.size()
         fea_matrix = x
         # Similarity Matrix
@@ -263,17 +263,17 @@ class CAWMASASTST(BaseModel):
         fullband_features = self.fullband_convolution(xcwt) 
         spectral_features = torch.cat((fullband_features,asa_features), dim=1) # also used for feature fusion
 
-        spectral_out = self.spe2(spectral_features).squeeze() # spectral features go through conv before being concatenated with other features
+        spectral_out = self.spe2(spectral_features).squeeze(1) # spectral features go through conv before being concatenated with other features
 
         # Spatial
         x, _ = self.caw(x)
         spa1_out= self.spa1(x.unsqueeze(1)) # also used for feature fusion
 
-        spa_out= self.spa2(spa1_out).squeeze() # spatial features go through conv before being concatenated with other features
+        spa_out= self.spa2(spa1_out).squeeze(1) # spatial features go through conv before being concatenated with other features
 
         # Feature Fusion
         transformer_out = self.feature_transformer(spectral_features,spa1_out)
-        fuse_out = self.feature_fusion(transformer_out).squeeze()
+        fuse_out = self.feature_fusion(transformer_out).squeeze(1)
 
         fused_features = torch.cat((spectral_out,spa_out,fuse_out),dim=1)
 

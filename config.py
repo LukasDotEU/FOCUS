@@ -25,7 +25,6 @@ DATASET_CONFIGS = [
             "pth_file": "eeg_55_95_std.pth",
         },
         "model_args": {
-            "EEGChannelNet": {"num_residual_blocks": 4},
             "NiceEEG": {
                 "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/NICE_clip_center_features.npy",
             },
@@ -91,7 +90,7 @@ DATASET_CONFIGS = [
             "use_original": False,
         },
         "model_args": {
-            "EEGChannelNet": {"num_residual_blocks": 3},
+            "EEGChannelNet": {"num_residual_blocks": 3, "temporal_stride": (1, 14)},
             "NiceEEG": {
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy",
             },
@@ -128,16 +127,18 @@ DATASET_CONFIGS = [
 # All available model configurations.
 MODEL_CONFIGS = [
     # KaneshiroOriginal: 16 -> 6; Kaneshiro: 320 -> 6;EEGImageNet: 208 -> 40; ThingsEEG2: 624 -> 1654
-    {
+    {  # NOTE: Using hyperparameters from "Image classification and reconstruction from low-density EEG"
+        # with MaxPooling instead of average. Not using any other model altercations done as not documented enough/unclear.
         "name": "EEGNet",
         "class": EEGNet,
         "args": {
-            "F1": 8,
-            "F2": 16,
+            "F1": 64,
+            "F2": 128,  # F1*D=64*2=128
             "D": 2,
             "kernel_1": 64,
             "kernel_2": 16,
             "dropout": 0.25,
+            "momentum": 0.1,
             "learning_rate": 1e-3,
         },
         "pretraining": False,
@@ -147,9 +148,9 @@ MODEL_CONFIGS = [
         "batch_size": 64,
     },
     # KaneshiroOriginal (2 residual blocks): 600 -> 1000 -> 6
-    # Kaneshiro (3 residual blocks): 7400 -> 1000 -> 6 TODO: Change and recheck as probably overfitting...
+    # Kaneshiro (3 residual blocks, temporal_stride: (1,14)): 600 -> 1000 -> 6
     # EEGImageNet (4 residual blocks): 500 -> 1000 -> 40 (Original)
-    # ThingsEEG2 (3 residual blocks): 600 -> 1000 -> 1654
+    # ThingsEEG2 (3 residual blocks): 600 -> 1000 -> 1654  TODO: Check if embedding size should be increased to 2000
     {
         "name": "EEGChannelNet",
         "class": EEGChannelNet,
@@ -160,11 +161,11 @@ MODEL_CONFIGS = [
             "embedding_size": 1000,
             "temporal_dilation_list": [(1, 1), (1, 2), (1, 4), (1, 8), (1, 16)],
             "temporal_kernel": (1, 33),
-            "temporal_stride": (1, 2),
+            "temporal_stride": (1, 2),  # overwritten by Kaneshiro dataset config
             "num_temp_layers": 4,
             "num_spatial_layers": 4,
             "spatial_stride": (2, 1),
-            # 'num_residual_blocks': 4, # -> Managed Dataset dependant
+            "num_residual_blocks": 4,  # overwritten by most dataset configs
             "down_kernel": 3,
             "down_stride": 2,
             "learning_rate": 1e-3,
@@ -268,8 +269,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "EEGImageNet",
-        "model": "CBraMod",
+        "dataset": "Kaneshiro",
+        "model": "EEGChannelNet",
     },
     # Add more combinations as desired...
 ]
