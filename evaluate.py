@@ -41,7 +41,6 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
       5) Record: total & trainable params, training time, inference time, validation metrics, test metrics.
     """
 
-    results = []
     set_seed(0) # Set a fixed seed for reproducibility
 
     # Prepare run directory for this dataset-model-split
@@ -70,7 +69,9 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         'images_file': images_file,
         **dataset_conf.get('args', {})
     }
-    full_dataset: BaseEEGDataset = DSClass(**ds_kwargs)
+
+    pre_load = False if dataset_conf['name'] == "CAWMASASTST" else True
+    full_dataset: BaseEEGDataset = DSClass(pre_load=pre_load, **ds_kwargs)
 
     # Build outer splits
     splitter = SplitGenerator(full_dataset.metadata)
@@ -244,7 +245,8 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             }
         }
         ckpt_path = os.path.join(run_dir, f'{split_name}.pt')
-        torch.save(checkpoint, ckpt_path)
+        if not testing:
+            torch.save(checkpoint, ckpt_path)
 
         print(
             f"[{split_name}] Test results → "
