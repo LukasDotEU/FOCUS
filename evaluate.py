@@ -70,7 +70,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         **dataset_conf.get('args', {})
     }
 
-    pre_load = False if dataset_conf['name'] == "CAWMASASTST" else True
+    pre_load = False if model_conf['name'] == "CAWMASASTST" else True
     full_dataset: BaseEEGDataset = DSClass(pre_load=pre_load, **ds_kwargs)
 
     # Build outer splits
@@ -265,6 +265,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate models with checkpointing')
     parser.add_argument('--testing', action='store_true', help='Save to test_model_weights instead of model_weights')
     args = parser.parse_args()
+
+    if args.testing:
+        print("Running in testing mode.", flush=True)
 
     base_dir = 'testing_model_weights' if args.testing else 'model_weights'
     os.makedirs(base_dir, exist_ok=True)
