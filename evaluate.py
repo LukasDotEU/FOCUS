@@ -19,7 +19,6 @@ from utils.splitGenerator import SplitGenerator
 # Import configuration.
 from config import DATASET_CONFIGS, MODEL_CONFIGS, SELECTED_CONFIGS
 
-NUM_WORKERS = 4
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Seed for reproducibility
@@ -72,6 +71,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
 
     pre_load = False if model_conf['name'] == "CAWMASASTST" else True
     full_dataset: BaseEEGDataset = DSClass(pre_load=pre_load, **ds_kwargs)
+    num_workers = 0 if pre_load else 4
 
     # Build outer splits
     splitter = SplitGenerator(full_dataset.metadata)
@@ -98,11 +98,11 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         train_inner_idx, val_idx = splitter.get_inner_split(outer_train_idx, split_name)
 
         train_loader = DataLoader(Subset(full_dataset, train_inner_idx),
-                                  batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
+                                  batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
         val_loader = DataLoader(Subset(full_dataset, val_idx),
-                                batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+                                batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
         test_loader = DataLoader(Subset(full_dataset, outer_test_idx),
-                                 batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+                                 batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
         # Instantiate model
         ModelClass = model_conf['class']
