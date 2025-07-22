@@ -168,7 +168,7 @@ MODEL_CONFIGS = [
             "num_residual_blocks": 4,  # overwritten by most dataset configs
             "down_kernel": 3,
             "down_stride": 2,
-            "learning_rate": 1e-3,
+            "learning_rate": 5e-4,
         },
         "pretraining": False,
         "use_images": False,
