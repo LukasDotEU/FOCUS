@@ -19,7 +19,6 @@ from utils.splitGenerator import SplitGenerator
 # Import configuration.
 from config import DATASET_CONFIGS, MODEL_CONFIGS, SELECTED_CONFIGS
 
-NUM_WORKERS = 4
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # Seed for reproducibility
@@ -41,7 +40,6 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
       5) Record: total & trainable params, training time, inference time, validation metrics, test metrics.
     """
 
-    results = []
     set_seed(0) # Set a fixed seed for reproducibility
 
     # Prepare run directory for this dataset-model-split
@@ -70,7 +68,10 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         'images_file': images_file,
         **dataset_conf.get('args', {})
     }
-    full_dataset: BaseEEGDataset = DSClass(**ds_kwargs)
+
+    pre_load = False if model_conf['name'] == "CAWMASASTST" else True
+    full_dataset: BaseEEGDataset = DSClass(pre_load=pre_load, **ds_kwargs)
+    num_workers = 0 if pre_load else 4
 
     # Build outer splits
     splitter = SplitGenerator(full_dataset.metadata)
@@ -97,11 +98,11 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         train_inner_idx, val_idx = splitter.get_inner_split(outer_train_idx, split_name)
 
         train_loader = DataLoader(Subset(full_dataset, train_inner_idx),
-                                  batch_size=batch_size, shuffle=True, num_workers=NUM_WORKERS, pin_memory=True)
+                                  batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
         val_loader = DataLoader(Subset(full_dataset, val_idx),
-                                batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+                                batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
         test_loader = DataLoader(Subset(full_dataset, outer_test_idx),
-                                 batch_size=batch_size, shuffle=False, num_workers=NUM_WORKERS, pin_memory=True)
+                                 batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
 
         # Instantiate model
         ModelClass = model_conf['class']
@@ -244,7 +245,8 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             }
         }
         ckpt_path = os.path.join(run_dir, f'{split_name}.pt')
-        torch.save(checkpoint, ckpt_path)
+        if not testing:
+            torch.save(checkpoint, ckpt_path)
 
         print(
             f"[{split_name}] Test results → "
@@ -263,6 +265,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evaluate models with checkpointing')
     parser.add_argument('--testing', action='store_true', help='Save to test_model_weights instead of model_weights')
     args = parser.parse_args()
+
+    if args.testing:
+        print("Running in testing mode.", flush=True)
 
     base_dir = 'testing_model_weights' if args.testing else 'model_weights'
     os.makedirs(base_dir, exist_ok=True)
