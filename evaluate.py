@@ -91,7 +91,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         outer_test_idx = split['test_idx']
 
         if len(outer_train_idx) < 2:
-            print(f"[{split_name}] outer_train has only {len(outer_train_idx)} samples → skipping.")
+            print(f"[{split_name}] outer_train has only {len(outer_train_idx)} samples → skipping.", flush=True)
             continue
 
         # Inner split for validation
@@ -127,8 +127,8 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
 
         model: BaseModel = ModelClass(device=DEVICE, **model_args)
         total_params, trainable_params = model.count_params()
-        print(f"[{split_name}] Initialized model '{model_name}' with '{ds_conf['name']}'")
-        print(f"[{split_name}] total_params={total_params}, trainable_params={trainable_params}")
+        print(f"[{split_name}] Initialized model '{model_name}' with '{ds_conf['name']}'", flush=True)
+        print(f"[{split_name}] total_params={total_params}, trainable_params={trainable_params}", flush=True)
 
         # Prepare wandb config
         wandb_config = {
@@ -142,7 +142,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             "trainable_params": trainable_params,
         }
         wandb.init(
-            project="eeg-object-eval",
+            project="eeg-object-eval",  #eeg-object-eval-EEGImageNet
             name=f"{dataset_conf['name']}_{model_conf['name']}_{split_name}",
             config=wandb_config,
             mode="disabled" if testing else "online",
@@ -174,7 +174,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
 
             print(
                 f"[{split_name}] Epoch {epoch+1}: loss={avg_train_loss:.4f}, train_F1={train_metrics['f1']:.4f}, "
-                f"val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})"
+                f"val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})", flush=True
             )
 
             wandb.log({
@@ -199,7 +199,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         # Reload best weights
         if best_state is not None:
             model.load_state_dict(best_state)
-            print(f"[{split_name}] Reloaded best model from epoch {best_epoch+1} (val_f1={best_val_score:.4f})")
+            print(f"[{split_name}] Reloaded best model from epoch {best_epoch+1} (val_f1={best_val_score:.4f})", flush=True)
 
         # Final evaluation on test set
         with Timer() as t_test:
@@ -253,7 +253,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             f"Acc: {test_metrics['accuracy']:.4f}, F1: {test_metrics['f1']:.4f}, "
             f"Precision: {test_metrics['precision']:.4f}, Recall: {test_metrics['recall']:.4f}, "
             f"Kappa: {test_metrics['cohen_kappa']:.4f}, AUC: {test_metrics['auc']:.4f}, "
-            f"Time: {test_time:.4f}s"
+            f"Time: {test_time:.4f}s", flush=True
         )
 
         # Clean up
@@ -289,4 +289,4 @@ if __name__ == '__main__':
 
         train_and_evaluate(ds_conf, m_conf, base_dir, args.testing)
 
-    print(f"Evaluation finished.")
+    print(f"Evaluation finished.", flush=True)
