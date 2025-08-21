@@ -59,7 +59,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
     # Instantiate full dataset
     DSClass = dataset_conf['class']
     dataset_args = model_conf.get('dataset_args', None)
-    images_file = (dataset_args.get('clip_indiviual_feature_file', None) if dataset_args else None)
+    images_file = (dataset_args.get('images_individual_feature_file', None) if dataset_args else None)
     ds_kwargs = {
         'eeg_root': dataset_conf['eeg_root'],
         'images_root': dataset_conf['images_root'],
@@ -147,6 +147,13 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             config=wandb_config,
             mode="disabled" if testing else "online",
         )
+
+        if model_conf.get('pretraining', False) and model_conf.get('pretrain_epochs', None):
+            print(f"[{split_name}] Pretraining model for {model_conf['pretrain_epochs']} epochs.", flush=True)
+            for pretrain_epoch in range(model_conf['pretrain_epochs']):
+                pretrain_loss = model.pretrain_one_epoch(train_loader)
+                print(f"[{split_name}] Pretrain Epoch {pretrain_epoch+1}/{model_conf['pretrain_epochs']}. loss={pretrain_loss:.4f}", flush=True)
+                wandb.log({"pretrain_epoch": pretrain_epoch + 1, "pretrain_loss": pretrain_loss})
 
         evaluator = Evaluator(average='macro')
         best_val_score = -float('inf')

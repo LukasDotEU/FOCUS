@@ -4,11 +4,10 @@ from datasets.thingsEEG2_dataset import ThingsEEG2
 from models.model_ATMS import ATMS
 from models.model_CAWMASASTST import CAWMASASTST
 from models.model_CBraMod import CBraMod
+from models.model_EEGCLIP import EEGClip
 from models.model_EEGNet import EEGNet
 from models.model_EEGChannelNet import EEGChannelNet
 from models.model_NiceEEG import NiceEEG
-
-# Parameters to add: Epochs, Batch size
 
 # All available dataset configurations.
 DATASET_CONFIGS = [
@@ -31,6 +30,7 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_center_features.npy",
             },
+            "EEGClip": {"mlp_inter": 256},
         },
     },
     {
@@ -53,6 +53,7 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
             },
+            "EEGClip": {"mlp_inter": 1024},  # TODO: Check if something else better
         },
     },
     {
@@ -76,6 +77,7 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
             },
         },
+        "EEGClip": {"mlp_inter": 1024},  # TODO: Check if something else better
     },
     {  # 51840 trials
         "name": "Kaneshiro",
@@ -97,6 +99,7 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
             },
+            "EEGClip": {"mlp_inter": 256},  # TODO: Check if 128 better
         },
     },
     {  # 51857 trials
@@ -119,6 +122,7 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
             },
+            "EEGClip": {"mlp_inter": 256},  # TODO: Check if 128 better
         },
     },
     # Add more dataset configurations here...
@@ -195,7 +199,7 @@ MODEL_CONFIGS = [
         "use_images": True,
         "use_cwt": False,
         "dataset_args": {
-            "clip_indiviual_feature_file": "NICE_clip_individual_features.pth"
+            "images_individual_feature_file": "NICE_clip_individual_features.pth"
         },
         "epochs": 200,
         "batch_size": 256,  # ?
@@ -210,7 +214,7 @@ MODEL_CONFIGS = [
             "m2": 51,
             "s": 5,
             "lr": 3e-4,
-            "d_model": 250,  # TODO: should this be changed to model specific?
+            "d_model": 250,
             "dropout": 0.25,
             "n_heads": 4,
             "e_layers": 1,
@@ -221,7 +225,7 @@ MODEL_CONFIGS = [
         "use_images": True,
         "use_cwt": False,
         "dataset_args": {
-            "clip_indiviual_feature_file": "ATMS_clip_individual_features.pth"
+            "images_individual_feature_file": "ATMS_clip_individual_features.pth"
         },
         "epochs": 40,  # Check
         "batch_size": 64,  # Check, paper says 16 but code 64?
@@ -262,6 +266,24 @@ MODEL_CONFIGS = [
         "epochs": 50,
         "batch_size": 64,
     },
+    {
+        "name": "EEGClip",
+        "class": EEGClip,
+        "args": {
+            "num_layers": 1,
+            "pretrain_lr": 3e-4,
+            "lr": 1e-4,
+        },
+        "pretraining": True,
+        "use_images": True,
+        "use_cwt": False,
+        "dataset_args": {
+            "images_individual_feature_file": "EEGClip_resnet50_individual_features.pth"
+        },
+		"pretrain_epochs": 2048,
+        "epochs": 250,
+        "batch_size": 64,
+    },
     # Add more model configurations here...
 ]
 
@@ -269,8 +291,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "Kaneshiro",
-        "model": "EEGChannelNet",
+        "dataset": "EEGImageNet",
+        "model": "EEGClip",
     },
     # Add more combinations as desired...
 ]
