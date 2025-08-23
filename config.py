@@ -2,6 +2,7 @@ from datasets.eegImageNet_dataset import EEGImageNet
 from datasets.kaneshiro_dataset import Kaneshiro
 from datasets.thingsEEG2_dataset import ThingsEEG2
 from models.model_ATMS import ATMS
+from models.model_BiLSTM import BiLSTM
 from models.model_CAWMASASTST import CAWMASASTST
 from models.model_CBraMod import CBraMod
 from models.model_EEGCLIP import EEGClip
@@ -30,7 +31,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_center_features.npy",
             },
-            "EEGClip": {"mlp_inter": 256},
+            "EEGClip": {"hidden_channels": [128]},
+            "BiLSTM": {"hidden_channels": [128]},
         },
     },
     {
@@ -53,7 +55,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
             },
-            "EEGClip": {"mlp_inter": 1024},  # TODO: Check if something else better
+            "EEGClip": {"hidden_channels": [512, 1024]},  # TODO: Check if something else better
+            "BiLSTM": {"hidden_channels": [512, 1024]},
         },
     },
     {
@@ -76,8 +79,9 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
             },
+            "EEGClip": {"hidden_channels": [512, 1024]},  # TODO: Check if something else better
+            "BiLSTM": {"hidden_channels": [512, 1024]},
         },
-        "EEGClip": {"mlp_inter": 1024},  # TODO: Check if something else better
     },
     {  # 51840 trials
         "name": "Kaneshiro",
@@ -99,7 +103,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
             },
-            "EEGClip": {"mlp_inter": 256},  # TODO: Check if 128 better
+            "EEGClip": {"hidden_channels": [64]},
+            "BiLSTM": {"hidden_channels": [64]},
         },
     },
     {  # 51857 trials
@@ -122,7 +127,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
             },
-            "EEGClip": {"mlp_inter": 256},  # TODO: Check if 128 better
+            "EEGClip": {"hidden_channels": [64]},
+            "BiLSTM": {"hidden_channels": [64]},
         },
     },
     # Add more dataset configurations here...
@@ -202,7 +208,7 @@ MODEL_CONFIGS = [
             "images_individual_feature_file": "NICE_clip_individual_features.pth"
         },
         "epochs": 200,
-        "batch_size": 256,  # ?
+        "batch_size": 256,  # TODO:?
     },
     {
         "name": "ATMS",
@@ -284,6 +290,19 @@ MODEL_CONFIGS = [
         "epochs": 250,
         "batch_size": 64,
     },
+    {
+        "name": "BiLSTM",
+        "class": BiLSTM,
+        "args": {
+            "lr": 1e-3,
+            "weight_decay": 1e-4,
+        },
+        "pretraining": False,
+        "use_images": False,
+        "use_cwt": False,
+        "epochs": 200,
+        "batch_size": 64,
+    },
     # Add more model configurations here...
 ]
 
@@ -292,7 +311,7 @@ MODEL_CONFIGS = [
 SELECTED_CONFIGS = [
     {
         "dataset": "EEGImageNet",
-        "model": "EEGClip",
+        "model": "BiLSTM",
     },
     # Add more combinations as desired...
 ]

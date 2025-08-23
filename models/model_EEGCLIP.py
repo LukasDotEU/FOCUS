@@ -3,6 +3,7 @@
 
 import torch
 from torch import nn
+import torchvision
 
 from models.model_base import BaseModel
 
@@ -16,7 +17,7 @@ class EEGClip(BaseModel):
         time_steps=440,
         num_electrodes=128,
         num_layers=1,
-        mlp_inter=256,
+        hidden_channels: list[int] = [256],
         pretrain_lr=3e-4,
         lr=1e-4,
     ):
@@ -25,7 +26,8 @@ class EEGClip(BaseModel):
         self.n_features = self.num_electrodes
         self.embedding_dim = self.num_electrodes * 2
         self.num_layers = num_layers
-        self.mlp_inter = mlp_inter
+        self.hidden_channels = hidden_channels
+        self.hidden_channels.append(self.num_classes)
 
         self.eeg_encoder = EEG_Encoder(
             in_channels=self.num_electrodes,
@@ -40,10 +42,9 @@ class EEGClip(BaseModel):
         )
 
         self.mlp = nn.Sequential(
-            nn.Linear(self.embedding_dim, self.mlp_inter),
-            nn.ReLU(),
-            nn.Dropout(0.1),
-            nn.Linear(self.mlp_inter, self.num_classes),
+            torchvision.ops.misc.MLP(in_channels=self.embedding_dim,
+                                            hidden_channels=self.hidden_channels,
+                                            dropout=0.1),
             nn.Softmax(dim=1) # not best practice but logits are already softmaxed in original model
         )
 
