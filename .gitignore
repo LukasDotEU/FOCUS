@@ -1,5 +1,7 @@
 __pycache__/
 .cache/
+cache/
+artifacts/
 
 testing_model_weights/
 model_weights/
