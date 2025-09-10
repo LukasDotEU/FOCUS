@@ -1,3 +1,5 @@
+# Roughly based on https://www.sciencedirect.com/science/article/abs/pii/S174680942030313X
+
 import torch
 import torch.nn as nn
 import torchvision

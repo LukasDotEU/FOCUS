@@ -1,6 +1,13 @@
-# EEG Object Evaluation
+# FOCUS - Framework for Object Classification Using EEG Signals
 
-This repository implements several methods for evaluating EEG signals in combination with visual stimuli. It provides a common interface for building and testing deep neural network models on EEG datasets, with optional integration of associated images. The framework includes dataset loaders, various deep learning models, training/evaluation utilities, and preprocessing scripts.
+## What is FOCUS?
+
+FOCUS (Framework for Object Classification Using EEG Signals) is a research-oriented framework designed to standardize and reproduce evaluation in EEG-based object classification tasks. It was developed to accompany our AAAI 2025 Demo Track submission and is intended to facilitate fair benchmarking across datasets and models.
+
+The framework supports multiple neural decoding models, three widely used EEG datasets, and multiple evaluation strategies (within-subject, cross-subject, and stratified CV). It provides a unified interface for running experiments, tracking results, and identifying potential confounds.
+
+📄 This repository accompanies the paper:  
+**"Framework for Object Classification Using EEG Signals - FOCUS" (submitted to AAAI 2026 Demo Track)**.
 
 ## Project Structure
 
@@ -28,18 +35,21 @@ This repository implements several methods for evaluating EEG signals in combina
 - **models/**  
   Contains implementations of various neural network models:
   - [`model_base.py`](models/model_base.py): Abstract base model class defining the common interface.
-  - [`model_EEGChannelNet.py`](models/model_EEGChannelNet.py): EEGChannelNet model for EEG classification.
-  - [`model_EEGNet.py`](models/model_EEGNet.py): EEGNet implementation adapted from torcheeg.
-  - [`model_NiceEEG.py`](models/model_NiceEEG.py): NICE-EEG model adapted from the NICE-EEG repository.
   - [`model_ATMS.py`](models/model_ATMS.py): **[EXPERIMENTAL]** ATMS model adapted from the ATMS repository.
+  - [`model_BiLSTM.py`](models/model_BiLSTM.py): BiLSTM model based on BiLSTM-AttGW.
   - [`model_CAWMASASTST.py`](models/model_CAWMASASTST.py): CAWMASASTST model adapted from the CAWMASASTST repository.
   - [`model_CBraMod.py`](models/model_CBraMod.py): CBraMod model adapted from the CBraMod repository. This requires checkpoint weights (`models/model_CBraMod_pretrained_weights.pth`) if using pretrained. These can be found via the origCBraMod repository.
+  - [`model_EEGChannelNet.py`](models/model_EEGChannelNet.py): EEGChannelNet model for EEG classification.
+  - [`model_EEGClip.py`](models/model_EEGClip.py): EEGClip based on the EEGStyleGAN-ADA implementation.
+  - [`model_EEGNet.py`](models/model_EEGNet.py): EEGNet implementation adapted from torcheeg.
+  - [`model_NiceEEG.py`](models/model_NiceEEG.py): NICE-EEG model adapted from the NICE-EEG repository.
 
 - **feature_preprocessing/**  
   Contains feature preprocessing scripts:
-  - [`NiceEEG_preprocessing.py`](feature_preprocessing/NiceEEG_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features and individual features.
   - [`ATMS_preprocessing.py`](feature_preprocessing/ATMS_preprocessing.py): Extracts CLIP features for images, CLIP features for labels and saves them.
-  - [`CAWMASASTST_eegcwt_preprocessing.py`](feature_preprocessing/CAWMASASTST_eegcwt_preprocessing.py): Computed EEG CWTs at different freqeuncies and saves them.
+  - [`CAWMASASTST_eegcwt_preprocessing.py`](feature_preprocessing/CAWMASASTST_eegcwt_preprocessing.py): Computed EEG CWTs at different frequencies and saves them.
+  - [`EEGClip_preprocessing.py`](feature_preprocessing/EEGClip_preprocessing.py): Extracts ResNet50 features for images and saves them.
+  - [`NiceEEG_preprocessing.py`](feature_preprocessing/NiceEEG_preprocessing.py): Extracts CLIP features for images, averages them per class and saves the center features and individual features.
 
 - **utils/**  
   Contains utility modules for metrics, data splits, and timing:
@@ -120,9 +130,9 @@ This script will:
 - Generate various train/validation/test splits using [`SplitGenerator`](utils/splitGenerator.py).
 - Train models (e.g., [`EEGNet`](models/model_EEGNet.py), [`EEGChannelNet`](models/model_EEGChannelNet.py), [`NiceEEG`](models/model_NiceEEG.py), ...) with specified hyperparameters.
 - Compute and log metrics using [`Evaluator`](utils/metrics.py) and time each phase with [`Timer`](utils/timers.py).
-- Save results to `evaluation_summary.csv`.
+- Log results through Wandb.
 
-### Slurm Script running
+### Running with Slurm
 
 Run the main slurm script to execute the entire training and evaluation pipeline in a detached slurm job:
 
