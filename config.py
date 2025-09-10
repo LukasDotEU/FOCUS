@@ -300,7 +300,7 @@ MODEL_CONFIGS = [
         "pretraining": False,
         "use_images": False,
         "use_cwt": False,
-        "epochs": 200,
+        "epochs": 50,
         "batch_size": 64,
     },
     # Add more model configurations here...
@@ -310,8 +310,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "EEGImageNet",
-        "model": "BiLSTM",
+        "dataset": "ThingsEEG2Averaged",
+        "model": "EEGClip",
     },
     # Add more combinations as desired...
 ]
