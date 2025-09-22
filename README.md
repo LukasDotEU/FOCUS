@@ -143,11 +143,7 @@ sbatch main.sh
 
 ## Preprocessing
 
-To extract individual dataset trials run the repective dataset file:
-
-```sh
-python datasets/eegImageNet_dataset.py
-```
+Preprocessing for individual datasets is automatically being done when being run for the first time. 
 
 To extract features, run one of the feature preprocessing script:
 

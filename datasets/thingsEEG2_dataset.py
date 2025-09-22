@@ -1,13 +1,8 @@
-import argparse
 import os
 import numpy as np
 import pandas as pd
 import torch
 import concurrent.futures
-
-import sys
-# ensure local package import works when running as script
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from datasets.base_dataset import BaseEEGDataset
 
@@ -100,6 +95,10 @@ class ThingsEEG2(BaseEEGDataset):
         
         mode = 'averaged' if self.average_reps else 'multitrials'
         self.samples_dir = os.path.join(self.eeg_root, f'thingseeg2_individual_pt_{mode}')
+        if not os.path.exists(self.samples_dir):
+            print(f"Preprocessing not done before. Preprocesing {mode} ThingsEEG2 into individual .pt files...")
+            preprocess(self.eeg_root, self.images_root, average_reps=self.average_reps)
+
         self.metadata = pd.read_csv(os.path.join(self.samples_dir, 'metadata.csv'))
         self.metadata = (self.metadata.sort_values('idx').set_index('idx', drop=False))  # Ensure sorted by idx
 
@@ -167,12 +166,3 @@ class ThingsEEG2(BaseEEGDataset):
             feat = self.images[class_label][img_label]
             sample['image'] = torch.from_numpy(feat)
         return sample
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Preprocess ThingsEEG2 .npy to per-trial .pt')
-    parser.add_argument('eeg_root', nargs='?', default='../Datasets/Things-EEG2/Preprocessed_data_250Hz/', help='Root directory with sub-XX folders')
-    parser.add_argument('images_root', nargs='?', default='../Datasets/Things-EEG2/Image_set/', help='Root directory for image metadata and image_set/')
-    args = parser.parse_args()
-
-    preprocess(args.eeg_root, args.images_root, average_reps=True)
-    preprocess(args.eeg_root, args.images_root, average_reps=False)

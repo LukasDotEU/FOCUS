@@ -1,12 +1,7 @@
 import os
-import argparse
 import pandas as pd
 import torch
 import concurrent.futures
-
-import sys
-# ensure local package import works when running as script
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from datasets.base_dataset import BaseEEGDataset
 
@@ -85,6 +80,10 @@ class EEGImageNet(BaseEEGDataset):
         self.pth_file = pth_file
 
         self.samples_dir = os.path.join(self.eeg_root, PTH_FILE_DIR[self.pth_file])
+        if not os.path.exists(self.samples_dir):
+            print(f"Preprocessing not done before. Preprocesing {self.pth_file} into individual .pt files...")
+            preprocess(self.pth_file, self.eeg_root)
+
         self.metadata = pd.read_csv(os.path.join(self.samples_dir, 'metadata.csv'))
         self.metadata = (self.metadata.sort_values('idx').set_index('idx', drop=False))  # Ensure sorted by idx
 
@@ -153,10 +152,3 @@ class EEGImageNet(BaseEEGDataset):
             feat = self.images[class_label][img_label]
             sample['image'] = torch.from_numpy(feat)
         return sample
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Preprocess EEGImageNet .pth to per-trial .pt')
-    parser.add_argument('eeg_root', nargs='?', default='../Datasets/EEGImageNet/', help='Output root for individual .pt files')
-    args = parser.parse_args()
-    for pth_file in PTH_FILE_DIR.keys():
-        preprocess(pth_file, args.eeg_root)

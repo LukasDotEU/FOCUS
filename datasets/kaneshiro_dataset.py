@@ -1,13 +1,8 @@
 import os
-import argparse
 import scipy.io
 import torch
 import pandas as pd
 import concurrent.futures
-
-import sys
-# ensure local package import works when running as script
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from datasets.base_dataset import BaseEEGDataset
 
@@ -116,6 +111,10 @@ class Kaneshiro(BaseEEGDataset):
 
         mode = 'original' if self.use_original else 'updated'
         samples_dir = os.path.join(self.eeg_root, f'kaneshiro{mode}_individual_pt')
+        if not os.path.exists(samples_dir):
+            print(f"Preprocessing not done before. Preprocesing {mode} data into individual .pt files...")
+            preprocess(self.eeg_root, use_original=self.use_original)
+
         meta_path = os.path.join(samples_dir, 'metadata.csv')
         self.metadata = pd.read_csv(meta_path)
         self.metadata = (self.metadata.sort_values('idx').set_index('idx', drop=False))  # Ensure sorted by idx
@@ -180,14 +179,3 @@ class Kaneshiro(BaseEEGDataset):
             sample['image'] = torch.from_numpy(feat)
         return sample
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Preprocess Kaneshiro .mat files and/or test dataset loader'
-    )
-    parser.add_argument('eeg_root', nargs='?', default='../Datasets/Kaneshiro/', help='Root directory for .mat data')
-    args = parser.parse_args()
-
-    # preprocess updated and original data
-    preprocess(args.eeg_root, use_original=False)
-    preprocess(args.eeg_root, use_original=True)
