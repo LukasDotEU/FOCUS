@@ -114,7 +114,21 @@ class EEGImageNet(BaseEEGDataset):
                     self.cwt_data = list(executor.map(load_pt, self._cwt_names))
 
         if self.use_images:
-            self.images = torch.load(os.path.join(self.images_root, self.images_file), weights_only=False)
+            images_file_path = os.path.join(self.images_root, self.images_file)
+            if not os.path.exists(images_file_path):
+                # TODO: Check if self.class_labels is actually already correct to pass that into process_dataset
+                eeg_file = os.path.join(self.eeg_root, self.pth_file)
+                if self.images_file.startswith('ATMS'):
+                    from feature_preprocessing.ATMS_preprocessing import process_dataset
+                    process_dataset(self.images_root, images_file_path, eeg_file=eeg_file)
+                elif self.images_file.startswith('NICE'):
+                    from feature_preprocessing.NiceEEG_preprocessing import process_dataset
+                    process_dataset(self.images_root, images_file_path, eeg_file=eeg_file)
+                elif self.images_file.startswith('EEGClip'):
+                    from feature_preprocessing.EEGClip_preprocessing import process_dataset
+                    process_dataset(self.images_root, images_file_path)
+
+            self.images = torch.load(images_file_path, weights_only=False)
 
     def __len__(self):
         return len(self.metadata)

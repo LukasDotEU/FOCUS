@@ -1,25 +1,16 @@
 """
 Extract resnet50 features for images in dataset directories specified in config.py,
 saving the features and corresponding folder names.
-
-WARNING: This script must be executed from the project directory
-and not from within the preprocessing folder, as the relative paths will not work correctly.
 """
 
-import sys
 import os
 from pathlib import Path
-
-# Add the parent directory to sys.path so config.py can be imported.
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-# Dirty hack but okay for now..
 
 import torch
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from torchvision.models import resnet50, ResNet50_Weights
-from config import DATASET_CONFIGS
 
 class GlobalImageDataset(Dataset):
     """
@@ -35,27 +26,29 @@ class GlobalImageDataset(Dataset):
         img = Image.open(self.image_paths[idx]).convert('RGB')
         return img
 
-def process_dataset(ds, model, preprocess, device, override=False):
+def process_dataset(images_root, images_file_path, ThingsEEG2 = False):
+    # Setup device and model
+    print("Initializing ResNet50 model and processor...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    dataset_name = ds["name"]
-    project_dir = Path(ds["images_root"])
-    if dataset_name.startswith("ThingsEEG2"):
-        # ThingsEEG2 has a different structure, so we need to adjust the path
-        project_dir = project_dir / 'image_set'
-    print(f"Processing dataset '{dataset_name}' at {project_dir}")
+    weights = ResNet50_Weights.DEFAULT
+    model = resnet50(weights=weights)
+    model.fc = torch.nn.Identity()
+    model.eval()
+    model = torch.nn.DataParallel(model).to(device)
+    
+    preprocess = weights.transforms()
 
-    individual_features_save_dir = project_dir / "EEGClip_resnet50_individual_features.pth"
-    # Check if the output file already exists to avoid reprocessing
-    if individual_features_save_dir.exists() and not override:
-        print(f"Found existing output for '{dataset_name}', skipping.")
-        return
+    images_root = Path(images_root)
+    if ThingsEEG2:  # ThingsEEG2 has a different structure, so we need to adjust the path
+        concepts_root = images_root
+        images_root = images_root / 'image_set'
+    print(f"Processing EEGClip ResNet50 features at {images_root}")
 
     # Gather all image folder paths and corresponding folder IDs
-    subfolders = sorted([entry.name for entry in os.scandir(project_dir) if entry.is_dir()])
-    if dataset_name.startswith("ThingsEEG2"):
-        # ThingsEEG2 has original test images in the same folder.
-        # We want to repurpose the training images only.
-        train_concepts = np.load(Path(ds["images_root"]) / 'image_metadata.npy', 
+    subfolders = sorted([entry.name for entry in os.scandir(images_root) if entry.is_dir()])
+    if ThingsEEG2:  # ThingsEEG2 has original test images in the same folder. We want to repurpose the training images only.
+        train_concepts = np.load(concepts_root / 'image_metadata.npy', 
                                  allow_pickle=True).item()['train_img_concepts']
         train_concepts = [concept.split('_', 1)[-1] for concept in train_concepts]
         subfolders = [folder for folder in subfolders if folder in train_concepts]
@@ -68,7 +61,7 @@ def process_dataset(ds, model, preprocess, device, override=False):
     image_labels = []
 
     for condition_id, folder in enumerate(subfolders):
-        folder_path = project_dir / folder
+        folder_path = images_root / folder
         file_names = [entry.name for entry in os.scandir(folder_path) 
                       if entry.is_file() and entry.name.lower().endswith(('.jpg', '.jpeg', '.png'))]
         for fname in file_names:
@@ -101,7 +94,7 @@ def process_dataset(ds, model, preprocess, device, override=False):
     total_batches = len(loader)
     # Single pass over all images
     for i, (imgs) in enumerate(loader):
-        print(f"[{dataset_name}] Processing batch {i+1}/{total_batches} ({len(imgs)} images)")
+        print(f"[EEGClip ResNet50 Features] Processing batch {i+1}/{total_batches} ({len(imgs)} images)")
         batch = torch.stack([preprocess(img) for img in imgs]).to(device, non_blocking=True)
         with torch.no_grad():
             feats = model(batch)
@@ -115,32 +108,5 @@ def process_dataset(ds, model, preprocess, device, override=False):
         if class_label not in feature_dict:
             feature_dict[class_label] = {}
         feature_dict[class_label][img_label] = feat_vec
-    torch.save(feature_dict, individual_features_save_dir)
-    print(f"Saved individual features for dataset '{dataset_name}' at {individual_features_save_dir}")
-
-def main():
-    # Setup device and model
-    print("Initializing ResNet50 model and processor...")
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-    weights = ResNet50_Weights.DEFAULT
-    model = resnet50(weights=weights)
-    model.fc = torch.nn.Identity()
-    model.eval()
-    model = torch.nn.DataParallel(model).to(device)
-    
-    preprocess = weights.transforms()
-
-    processed = []
-    for ds in DATASET_CONFIGS:
-        # Check if the project directory has already been processed
-        if ds["images_root"] in processed:
-            print(f"Dataset '{ds['name']}' (or similar) already processed, skipping.")
-            continue
-        processed.append(ds["images_root"])
-
-        process_dataset(ds, model, preprocess, device, override=False)
-
-
-if __name__ == '__main__':
-    main()
+    torch.save(feature_dict, images_file_path)
+    print(f"Saved individual EEGClip ResNet50 features at {images_file_path}")

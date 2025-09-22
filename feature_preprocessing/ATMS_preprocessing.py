@@ -1,35 +1,18 @@
 """
 Extract CLIP features for images in dataset directories specified in config.py,
 saving the features and corresponding folder names.
-
-WARNING: This script must be executed from the project directory
-and not from within the preprocessing folder, as the relative paths will not work correctly.
 """
 
-import sys
 import os
 from pathlib import Path
 
-# Add the parent directory to sys.path so config.py can be imported.
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-# Dirty hack but okay for now..
 
 import torch
 import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
 from transformers import CLIPProcessor, CLIPModel
-from config import DATASET_CONFIGS
 
-# Mapping for Kaneshiro numeric labels\NAMESPACE
-KANESHIRO_LABELS = {
-    1: 'Human Body',
-    2: 'Human Face',
-    3: 'Animal Body',
-    4: 'Animal Face',
-    5: 'Fruit Vegetable',
-    6: 'Inanimate Object'
-}
 
 class GlobalImageDataset(Dataset):
     """
@@ -46,27 +29,24 @@ class GlobalImageDataset(Dataset):
         return img
 
 
-def process_dataset(ds, model, processor, device, override=False):
+def process_dataset(images_root, images_file_path, eeg_file = None, kaneshiro_labels = None, ThingsEEG2 = False):
+    # Setup device and model
+    print("Initializing CLIP model and processor...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = CLIPModel.from_pretrained('laion/CLIP-ViT-H-14-laion2B-s32B-b79K', cache_dir='.cache')
+    model = torch.nn.DataParallel(model).to(device)
+    processor = CLIPProcessor.from_pretrained('laion/CLIP-ViT-H-14-laion2B-s32B-b79K', cache_dir='.cache')
 
-    dataset_name = ds["name"]
-    project_dir = Path(ds["images_root"])
-    if dataset_name.startswith("ThingsEEG2"):
-        # ThingsEEG2 has a different structure, so we need to adjust the path
+    project_dir = Path(images_root)
+    if ThingsEEG2:  # ThingsEEG2 has a different structure, so we need to adjust the path
+        concepts_root = images_root
         project_dir = project_dir / 'image_set'
-    print(f"Processing dataset '{dataset_name}' at {project_dir}")
-
-    output_path = project_dir / 'ATMS_clip_label_features.npy'
-    # Check if the output file already exists to avoid reprocessing
-    if output_path.exists() and not override:
-        print(f"Found existing output for '{dataset_name}', skipping.")
-        return
+    print(f"Processing ATMS Clip features at {project_dir}")
 
     # Gather all image folder paths and corresponding folder IDs
     subfolders = sorted([entry.name for entry in os.scandir(project_dir) if entry.is_dir()])
-    if dataset_name.startswith("ThingsEEG2"):
-        # ThingsEEG2 has original test images in the same folder.
-        # We want to repurpose the training images only.
-        train_concepts = np.load(Path(ds["images_root"]) / 'image_metadata.npy', 
+    if ThingsEEG2:  # ThingsEEG2 has original test images in the same folder. We want to repurpose the training images only.
+        train_concepts = np.load(concepts_root / 'image_metadata.npy', 
                                  allow_pickle=True).item()['train_img_concepts']
         train_concepts = [concept.split('_', 1)[-1] for concept in train_concepts]
         subfolders = [folder for folder in subfolders if folder in train_concepts]
@@ -101,8 +81,9 @@ def process_dataset(ds, model, processor, device, override=False):
 
     # === Extract and save individual image features ===
     all_feats = []
+
     for i, imgs in enumerate(loader):
-        print(f"[{dataset_name}] Batch {i+1}/{len(loader)}")
+        print(f"[ATMS Clip Features] Processing batch {i+1}/{len(loader)} ({len(imgs)} images)")
         batch = processor(images=imgs, return_tensors='pt').pixel_values.to(device, non_blocking=True)
         with torch.no_grad():
             feats = model.module.get_image_features(batch)
@@ -113,12 +94,12 @@ def process_dataset(ds, model, processor, device, override=False):
     feature_dict = {}
     for feat_vec, class_label, img_label in zip(feats_tensor.numpy(), class_labels, image_labels):
         feature_dict.setdefault(class_label, {})[img_label] = feat_vec
-    torch.save(feature_dict, project_dir / "ATMS_clip_individual_features.pth")
-    print(f"Saved individual image features at {project_dir / 'ATMS_clip_individual_features.pth'}")
+    torch.save(feature_dict, images_file_path)
+    print(f"Saved individual ATMS Clip features at {images_file_path}")
 
     # === Compute CLIP text embeddings for class labels ===
-    if dataset_name.startswith("Kaneshiro"):
-        text_labels = [KANESHIRO_LABELS[int(f)] for f in subfolders]
+    if kaneshiro_labels is not None:
+        text_labels = [kaneshiro_labels[int(f)] for f in subfolders]
     else:
         text_labels = subfolders
 
@@ -132,37 +113,17 @@ def process_dataset(ds, model, processor, device, override=False):
         'clip_label_names': text_labels
     }
 
-    if dataset_name == "EEGImageNet":
+    # Special reorder for EEGImageNet as original class_id order is not alphabetical.
+    if eeg_file is not None:
         print("Reordering EEGImageNet classes...")
-        eeg_data = torch.load(os.path.join(ds["eeg_root"], 'eeg_55_95_std.pth'))
+        eeg_data = torch.load(Path(eeg_file))
         order = eeg_data["labels"]
         orig_feats = result['clip_label_features']
         orig_names = result['clip_label_names']
         reordered = np.stack([orig_feats[orig_names.index(lbl)] for lbl in order])
         result = { 'clip_label_features': reordered, 'clip_label_names': order }
 
+    label_features_file = project_dir / 'ATMS_clip_label_features.npy'
     # Save the result as a dataset-specific file
-    np.save(output_path, result)
-    print(f"Saved label features at {output_path}")
-
-
-def main():
-    # Setup device and model
-    print("Initializing CLIP model and processor...")
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = CLIPModel.from_pretrained('laion/CLIP-ViT-H-14-laion2B-s32B-b79K', cache_dir='.cache')
-    model = torch.nn.DataParallel(model).to(device)
-    processor = CLIPProcessor.from_pretrained('laion/CLIP-ViT-H-14-laion2B-s32B-b79K', cache_dir='.cache')
-
-    seen = set()
-    for ds in DATASET_CONFIGS:
-        # Check if the project directory has already been processed
-        root = ds['images_root']
-        if root in seen:
-            print(f"Already processed {root} (or similar), skipping.")
-            continue
-        seen.add(root)
-        process_dataset(ds, model, processor, device, override=False)
-
-if __name__ == '__main__':
-    main()
+    np.save(label_features_file, result)
+    print(f"Saved label features at {label_features_file}")

@@ -143,7 +143,19 @@ class Kaneshiro(BaseEEGDataset):
                     self.cwt_data = list(executor.map(load_pt, self._cwt_names))
 
         if self.use_images:
-            self.images = torch.load(os.path.join(self.images_root, self.images_file), weights_only=False)
+            images_file_path = os.path.join(self.images_root, self.images_file)
+            if not os.path.exists(images_file_path):
+                if self.images_file.startswith('ATMS'):
+                    from feature_preprocessing.ATMS_preprocessing import process_dataset
+                    process_dataset(self.images_root, images_file_path, kaneshiro_labels=CLASS_LABELS)
+                elif self.images_file.startswith('NICE'):
+                    from feature_preprocessing.NiceEEG_preprocessing import process_dataset
+                    process_dataset(self.images_root, images_file_path)
+                elif self.images_file.startswith('EEGClip'):
+                    from feature_preprocessing.EEGClip_preprocessing import process_dataset
+                    process_dataset(self.images_root, images_file_path)
+
+            self.images = torch.load(images_file_path, weights_only=False)
 
     def __len__(self):
         return len(self.metadata)
