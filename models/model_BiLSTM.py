@@ -41,7 +41,7 @@ class BiLSTM(BaseModel):
     
     def forward(self, batch):
         """
-        Forward pass for the EEGNet.
+        Forward pass for the BiLSTM.
         Expects 'eeg' in batch, and returns logits.
         """
         eeg = batch['eeg'].transpose(1,2)  # [B, C, T]
