@@ -1,4 +1,4 @@
-name: eeg-object-eval
+name: FOCUS
 channels:
   - defaults
 dependencies:

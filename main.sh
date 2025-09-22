@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --account=heilu021
-#SBATCH --job-name=EEG-Object-Evaluate-Test-EEGNet-EEGChannelNet-AllDatasets
+#SBATCH --job-name=FOCUS
 #SBATCH --partition=aoraki_gpu_H100
 #SBATCH --gpus-per-node=1
 #SBATCH --gpus=1
 #SBATCH --cpus-per-gpu=6
 #SBATCH --mem=128GB
-#SBATCH --time=36:00:00
+#SBATCH --time=96:00:00
 #SBATCH --output=slurm_outputs/%j_%x.out
 
 start_time=$(date +%s)
@@ -15,7 +15,7 @@ start_time=$(date +%s)
 source /projects/sciences/computing/heilu021/miniconda3/etc/profile.d/conda.sh
 export PYTHONNOUSERSITE=1 # don't add python user site library to path
 
-conda activate eeg-object-eval
+conda activate FOCUS
 
 python evaluate.py
 

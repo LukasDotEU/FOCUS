@@ -17,8 +17,8 @@ The framework supports multiple neural decoding models, three widely used EEG da
 - **config.py**  
   Central configuration file containing dataset and model configuration parameters ([config.py](config.py)).
 
-- **eeg-object-eval.yml**  
-  Conda environment file for the project dependencies ([eeg-object-eval.yml](eeg-object-eval.yml)).
+- **FOCUS.yml**  
+  Conda environment file for the project dependencies ([FOCUS.yml](FOCUS.yml)).
 
 - **evaluate.py**  
   Main script to run training and evaluation experiments. It loads datasets, creates splits, trains models, and outputs the evaluation metrics ([evaluate.py](evaluate.py)).
@@ -63,14 +63,14 @@ The framework supports multiple neural decoding models, three widely used EEG da
 
    ```sh
    git clone <repo-url>
-   cd eeg-object-eval
+   cd FOCUS
    ```
 
 2. **Create and Activate the Conda Environment**
 
    ```sh
-   conda env create -f eeg-object-eval.yml
-   conda activate eeg-object-eval
+   conda env create -f FOCUS.yml
+   conda activate FOCUS
    ```
 
 ## Datasets
