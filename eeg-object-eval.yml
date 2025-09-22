@@ -22,6 +22,8 @@ dependencies:
       - open-clip-torch
       - PyWavelets
       - wandb
+      - h5py
+      - mne
 
       # for evaluation and visualization
       - matplotlib

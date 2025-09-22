@@ -1,4 +1,5 @@
 from datasets.eegImageNet_dataset import EEGImageNet
+from datasets.eood_dataset import EOODDataset
 from datasets.kaneshiro_dataset import Kaneshiro
 from datasets.thingsEEG2_dataset import ThingsEEG2
 from models.model_ATMS import ATMS
@@ -129,6 +130,35 @@ DATASET_CONFIGS = [
             },
             "EEGClip": {"hidden_channels": [64]},
             "BiLSTM": {"hidden_channels": [64]},
+        },
+    },
+    {
+        "name": "EOODDataset",
+        "class": EOODDataset,
+        "eeg_root": "../Datasets/EOOD/",
+        "images_root": "../Datasets/EOOD/TODO/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "use_sequence": False,
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 0.1,
+            "low_pass": 100.0,
+            "notch_freqs": [50.0],
+            "average_reference": True,
+            "zscore_norm": True,
+        },
+        "model_args": {
+            "NiceEEG": {
+                #"clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                #"clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_center_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [128]},
+            "BiLSTM": {"hidden_channels": [128]},
         },
     },
     # Add more dataset configurations here...
@@ -310,8 +340,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "ThingsEEG2Averaged",
-        "model": "EEGClip",
+        "dataset": "EOODDataset",
+        "model": "EEGNet",
     },
     # Add more combinations as desired...
 ]
