@@ -10,6 +10,7 @@ class EOODDataset(BaseEEGDataset):
         self,
         eeg_root: str,
         images_root: str,
+        sampling_rate: float,
         use_images: bool = False,
         images_file: str = None,
         use_cwt: bool = False,
@@ -38,7 +39,7 @@ class EOODDataset(BaseEEGDataset):
         Note:
             eeg_root is the raw data root directory (used as in_raw_dir in the preprocessing call).
         """
-        super().__init__(eeg_root=eeg_root, images_root=images_root, 
+        super().__init__(eeg_root=eeg_root, images_root=images_root, sampling_rate=sampling_rate,
                          use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         # Build a base name using the preprocessing parameters:
         t0, t1 = baseline_t
@@ -84,6 +85,9 @@ class EOODDataset(BaseEEGDataset):
         # Reset index and add a new 'idx' column representing the new order, then set it as the index.
         self.metadata.reset_index(drop=True, inplace=True)
         self.metadata["idx"] = self.metadata.index
+
+        if self.use_cwt:
+            raise NotImplementedError("CWT not implemented for EOODDataset yet.")
         
         if self.pre_load:
             # Preload EEG data for filtered epochs only.
@@ -91,6 +95,23 @@ class EOODDataset(BaseEEGDataset):
             with h5py.File(self.preproc_path, "r") as f:
                 for epoch_idx in self.metadata["epoch_idx"]:
                     self._data_cache.append(f[f"{epoch_idx}/data"][()])
+        
+        if self.use_images:
+            images_file_path = os.path.join(self.images_root, self.images_file)
+            if not os.path.exists(images_file_path):
+                subfolders = sorted([e.name for e in os.scandir(self.images_root) 
+                                     if e.is_dir() and not 'jitter' in e.name and e.name.endswith('images')])
+                if self.images_file.startswith('ATMS'):
+                    from feature_preprocessing.ATMS_preprocessing import process_dataset
+                    process_dataset(self.images_root, subfolders, class_text_labels=[s.split("_")[0] for s in subfolders])
+                elif self.images_file.startswith('NICE'):
+                    from feature_preprocessing.NiceEEG_preprocessing import process_dataset
+                    process_dataset(self.images_root, subfolders)
+                elif self.images_file.startswith('EEGClip'):
+                    from feature_preprocessing.EEGClip_preprocessing import process_dataset
+                    process_dataset(self.images_root, subfolders)
+            
+            self.images = torch.load(images_file_path, weights_only=False)
 
     def _load_metadata(self) -> pd.DataFrame:
         meta_records = []
@@ -119,8 +140,24 @@ class EOODDataset(BaseEEGDataset):
         row = self.metadata.iloc[index]
         if self.pre_load:
             data = self._data_cache[index]
+            if self.use_cwt:
+                raise NotImplementedError("CWT not implemented for EOODDataset yet.")
         else:
             data = self._load_epoch(row["epoch_idx"])
+            if self.use_cwt:
+                raise NotImplementedError("CWT not implemented for EOODDataset yet.")
+            
         sample = {"eeg": torch.tensor(data)}
+
+        if self.use_cwt:
+            raise NotImplementedError("CWT not implemented for EOODDataset yet.")
+            sample["cwt"] = torch.tensor(cwt_data)  # Placeholder; implement CWT loading if needed.
+        
+        if self.use_images:
+            class_label = f"{row['class_name']}_{row['class_idx']}_images"
+            img_label = f"{row['class_name']}_{row['image_idx']}"
+            feat = self.images[class_label][img_label]
+            sample['image'] = torch.from_numpy(feat)
+
         sample.update(row.to_dict())
         return sample
