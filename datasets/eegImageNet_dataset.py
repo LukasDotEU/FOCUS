@@ -16,7 +16,7 @@ def preprocess(pth_file: str, eeg_root: str):
     Reads the .pth at eeg_root/pth_file, splits each sample into its own .pt file under:
       <eeg_root>/eegimagenet_individual_pt_.../
     Also generates:
-      - metadata.csv with fields: idx, filepath, subject, class_idx, image_idx
+      - metadata.csv with fields: idx, filename, subject, class_idx, image_idx
       - class_labels.pt: list of class label strings
       - image_labels.pt: list of image label strings
     """
@@ -48,7 +48,7 @@ def preprocess(pth_file: str, eeg_root: str):
 
         records.append({
             'idx': idx,
-            'filepath': fname,
+            'filename': fname,
             'subject': subj,
             'class_idx': class_idx,
             'image_idx': image_idx,
@@ -91,20 +91,23 @@ class EEGImageNet(BaseEEGDataset):
         self.class_labels = torch.load(os.path.join(self.samples_dir, 'class_labels.pt'))
         self.image_labels = torch.load(os.path.join(self.samples_dir, 'image_labels.pt'))
 
-        # Precompute ordered list of filepaths (and CWT names if needed)
-        self._filepaths = self.metadata['filepath'].tolist()
+        # depracation compliance when filename column was named filepath
+        if 'filepath' in self.metadata.columns:
+            self.metadata.rename(columns={'filepath': 'filename'}, inplace=True)
+        
+        self._filenames = self.metadata['filename'].tolist()
         if self.use_cwt:
-            self._cwt_paths = ["cwt_" + fp for fp in self._filepaths]
+            self._cwt_names = ["cwt_" + fp for fp in self._filenames]
 
         if self.pre_load:
             def load_pt(fname):
                 return torch.load(os.path.join(self.samples_dir, fname))
             # Pre-load all EEG data
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filepaths))
+                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filenames))
             if self.use_cwt:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    self.cwt_data = list(executor.map(load_pt, self._cwt_paths))
+                    self.cwt_data = list(executor.map(load_pt, self._cwt_names))
 
         if self.use_images:
             self.images = torch.load(os.path.join(self.images_root, self.images_file), weights_only=False)
@@ -131,9 +134,9 @@ class EEGImageNet(BaseEEGDataset):
             if self.use_cwt:
                 cwt = self.cwt_data[idx]
         else:
-            eeg = torch.load(os.path.join(self.samples_dir, row['filepath']))
+            eeg = torch.load(os.path.join(self.samples_dir, row['filename']))
             if self.use_cwt:
-                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filepath']))
+                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filename']))
 
         sample = {
             'eeg': eeg,
