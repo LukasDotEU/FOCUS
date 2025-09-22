@@ -5,10 +5,10 @@ import pandas as pd
 import concurrent.futures
 
 from datasets.base_dataset import BaseEEGDataset
-from feature_preprocessing.CAWMASASTST_eegcwt_preprocessing import process_dataset
+from feature_preprocessing import CAWMASASTST_eegcwt_preprocessing
 
 # Mapping from class ID to human-readable class label
-CLASS_LABELS = {
+CLASS_TEXT_DICT = {
     1: 'Human Body',
     2: 'Human Face',
     3: 'Animal Body',
@@ -130,7 +130,7 @@ class Kaneshiro(BaseEEGDataset):
             self._cwt_names = ["cwt_" + fp for fp in self._filenames]
             if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
                 print("CWT files not found, computing CWT for all trials...")
-                process_dataset(self.samples_dir, self.sampling_rate)
+                CAWMASASTST_eegcwt_preprocessing.process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):
@@ -145,16 +145,18 @@ class Kaneshiro(BaseEEGDataset):
         if self.use_images:
             images_file_path = os.path.join(self.images_root, self.images_file)
             if not os.path.exists(images_file_path):
+                subfolders = sorted([entry.name for entry in os.scandir(self.images_root) if entry.is_dir()])
                 if self.images_file.startswith('ATMS'):
                     from feature_preprocessing.ATMS_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path, kaneshiro_labels=CLASS_LABELS)
+                    class_text_labels = [CLASS_TEXT_DICT[label] for label in subfolders]
+                    process_dataset(self.images_root, subfolders, class_text_labels)
                 elif self.images_file.startswith('NICE'):
                     from feature_preprocessing.NiceEEG_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path)
+                    process_dataset(self.images_root, subfolders)
                 elif self.images_file.startswith('EEGClip'):
                     from feature_preprocessing.EEGClip_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path)
-
+                    process_dataset(self.images_root, subfolders)
+            
             self.images = torch.load(images_file_path, weights_only=False)
 
     def __len__(self):

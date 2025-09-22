@@ -4,13 +4,56 @@ import torch
 import concurrent.futures
 
 from datasets.base_dataset import BaseEEGDataset
-from feature_preprocessing.CAWMASASTST_eegcwt_preprocessing import process_dataset
+from feature_preprocessing import CAWMASASTST_eegcwt_preprocessing
 
 PTH_FILE_DIR = {
     'eeg_55_95_std.pth': 'eegimagenet_individual_pt_55_95',
     'eeg_5_95_std.pth': 'eegimagenet_individual_pt_5_95',
     #'eeg_14_70_std.pth': 'eegimagenet_individual_pt_14_70'
 }
+
+LABEL_TEXT_DICT = {'n02106662': 'german shepherd dog',
+'n02124075': 'cat ',
+'n02281787': 'lycaenid butterfly',
+'n02389026': 'sorrel horse',
+'n02492035': 'Cebus capucinus',
+'n02504458': 'African elephant',
+'n02510455': 'panda',
+'n02607072': 'anemone fish',
+'n02690373': 'airliner',
+'n02906734': 'broom',
+'n02951358': 'canoe or kayak',
+'n02992529': 'cellular telephone',
+'n03063599': 'coffee mug',
+'n03100240': 'old convertible',
+'n03180011': 'desktop computer',
+'n03197337': 'digital watch',
+'n03272010': 'electric guitar',
+'n03272562': 'electric locomotive',
+'n03297495': 'espresso maker',
+'n03376595': 'folding chair',
+'n03445777': 'golf ball',
+'n03452741': 'grand piano',
+'n03584829': 'smoothing iron',
+'n03590841': 'Orange jack-o’-lantern',
+'n03709823': 'mailbag',
+'n03773504': 'missile',
+'n03775071': 'mitten,glove',
+'n03792782': 'mountain bike, all-terrain bike',
+'n03792972': 'mountain tent',
+'n03877472': 'pajama',
+'n03888257': 'parachute',
+'n03982430': 'pool table, billiard table, snooker table ',
+'n04044716': 'radio telescope',
+'n04069434': 'eflex camera',
+'n04086273': 'revolver, six-shooter',
+'n04120489': 'running shoe',
+'n07753592': 'banana',
+'n07873807': 'pizza',
+'n11939491': 'daisy',
+'n13054560': 'bolete'
+}
+
 
 def preprocess(pth_file: str, eeg_root: str):
     """
@@ -101,7 +144,7 @@ class EEGImageNet(BaseEEGDataset):
             self._cwt_names = ["cwt_" + fp for fp in self._filenames]
             if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
                 print("CWT files not found, computing CWT for all trials...")
-                process_dataset(self.samples_dir, self.sampling_rate)
+                CAWMASASTST_eegcwt_preprocessing.process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):
@@ -116,18 +159,19 @@ class EEGImageNet(BaseEEGDataset):
         if self.use_images:
             images_file_path = os.path.join(self.images_root, self.images_file)
             if not os.path.exists(images_file_path):
-                # TODO: Check if self.class_labels is actually already correct to pass that into process_dataset
-                eeg_file = os.path.join(self.eeg_root, self.pth_file)
+                # subfolders are named after class_labels so can use the class_labels directly
+                # this also directly has the right order, as the classlabels in the dataset are not sorted
                 if self.images_file.startswith('ATMS'):
                     from feature_preprocessing.ATMS_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path, eeg_file=eeg_file)
+                    class_text_labels = [LABEL_TEXT_DICT[label] for label in self.class_labels]
+                    process_dataset(self.images_root, subfolders=self.class_labels, class_text_labels=class_text_labels)
                 elif self.images_file.startswith('NICE'):
                     from feature_preprocessing.NiceEEG_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path, eeg_file=eeg_file)
+                    process_dataset(self.images_root, subfolders=self.class_labels)
                 elif self.images_file.startswith('EEGClip'):
                     from feature_preprocessing.EEGClip_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path)
-
+                    process_dataset(self.images_root, subfolders=self.class_labels)
+            
             self.images = torch.load(images_file_path, weights_only=False)
 
     def __len__(self):

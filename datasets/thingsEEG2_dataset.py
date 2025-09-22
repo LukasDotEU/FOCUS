@@ -5,7 +5,7 @@ import torch
 import concurrent.futures
 
 from datasets.base_dataset import BaseEEGDataset
-from feature_preprocessing.CAWMASASTST_eegcwt_preprocessing import process_dataset
+from feature_preprocessing import CAWMASASTST_eegcwt_preprocessing
 
 def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
     """
@@ -115,7 +115,7 @@ class ThingsEEG2(BaseEEGDataset):
             self._cwt_names = ["cwt_" + fp for fp in self._filenames]
             if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
                 print("CWT files not found, computing CWT for all trials...")
-                process_dataset(self.samples_dir, self.sampling_rate)
+                CAWMASASTST_eegcwt_preprocessing.process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):
@@ -128,18 +128,25 @@ class ThingsEEG2(BaseEEGDataset):
                     self.cwt_data = list(executor.map(load_pt, self._cwt_names))
 
         if self.use_images:
-            images_file_path = os.path.join(self.images_root, 'image_set', self.images_file)
+            images_files_dir = os.path.join(self.images_root, 'image_set')
+            images_file_path = os.path.join(images_files_dir, self.images_file)
             if not os.path.exists(images_file_path):
+                subfolders = sorted([entry.name for entry in os.scandir(images_files_dir) if entry.is_dir()])
+                train_concepts = np.load(os.path.join(self.images_root, 'image_metadata.npy'), 
+                                 allow_pickle=True).item()['train_img_concepts']
+                train_concepts = [concept.split('_', 1)[-1] for concept in train_concepts]
+                subfolders = [folder for folder in subfolders if folder in train_concepts]
+                
                 if self.images_file.startswith('ATMS'):
                     from feature_preprocessing.ATMS_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path, ThingsEEG2=True)
+                    process_dataset(images_files_dir, subfolders, class_text_labels=[s.replace("_", " ") for s in subfolders])
                 elif self.images_file.startswith('NICE'):
                     from feature_preprocessing.NiceEEG_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path, ThingsEEG2=True)
+                    process_dataset(images_files_dir, subfolders)
                 elif self.images_file.startswith('EEGClip'):
                     from feature_preprocessing.EEGClip_preprocessing import process_dataset
-                    process_dataset(self.images_root, images_file_path, ThingsEEG2=True)
-
+                    process_dataset(images_files_dir, subfolders)
+            
             self.images = torch.load(images_file_path, weights_only=False)
 
     def __len__(self):
