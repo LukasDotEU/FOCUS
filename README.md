@@ -145,12 +145,6 @@ sbatch main.sh
 
 Preprocessing for individual datasets is automatically being done when being run for the first time. 
 
-To extract features, run one of the feature preprocessing script:
-
-```sh
-python feature_preprocessing/NiceEEG_preprocessing.py
-```
-
 > **Note**: Make sure to run the scripts from the project root directory due to relative path dependencies.
 
 ## Contributing
