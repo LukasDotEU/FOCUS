@@ -5,6 +5,7 @@ import torch
 import concurrent.futures
 
 from datasets.base_dataset import BaseEEGDataset
+from feature_preprocessing.CAWMASASTST_eegcwt_preprocessing import process_dataset
 
 def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
     """
@@ -77,7 +78,7 @@ def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
     print(f"Saved {trial_idx} trials to {out_dir}")
 
 class ThingsEEG2(BaseEEGDataset):
-    def __init__(self, eeg_root: str, images_root: str, average_reps: bool = False,
+    def __init__(self, eeg_root: str, images_root: str, sampling_rate: float, average_reps: bool = False,
                  use_images: bool = False, images_file: bool = None, use_cwt: bool = False, pre_load: bool = True):
         """
         Dataset for ThingsEEG2 trials saved via preprocess().
@@ -90,7 +91,7 @@ class ThingsEEG2(BaseEEGDataset):
           - trial_xxxxxx.pt files
         images_root/image_set/... for loading raw images if use_images.
         """
-        super().__init__(eeg_root=eeg_root, images_root=images_root, use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
+        super().__init__(eeg_root=eeg_root, images_root=images_root, sampling_rate=sampling_rate, use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         self.average_reps = average_reps  # If True, average the 4 repetitions of each image
         
         mode = 'averaged' if self.average_reps else 'multitrials'
@@ -112,6 +113,9 @@ class ThingsEEG2(BaseEEGDataset):
         self._filenames = self.metadata['filename'].tolist()
         if self.use_cwt:
             self._cwt_names = ["cwt_" + fp for fp in self._filenames]
+            if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
+                print("CWT files not found, computing CWT for all trials...")
+                process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):

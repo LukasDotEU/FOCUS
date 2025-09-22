@@ -5,6 +5,7 @@ import pandas as pd
 import concurrent.futures
 
 from datasets.base_dataset import BaseEEGDataset
+from feature_preprocessing.CAWMASASTST_eegcwt_preprocessing import process_dataset
 
 # Mapping from class ID to human-readable class label
 CLASS_LABELS = {
@@ -103,9 +104,9 @@ class Kaneshiro(BaseEEGDataset):
         use_images: if True, load image features from images_root/images_file.
         use_original: if True, loads from the 'original' folder; else 'updated'.
     """
-    def __init__(self, eeg_root: str, images_root: str, use_original: bool,
+    def __init__(self, eeg_root: str, images_root: str, sampling_rate: float, use_original: bool,
                  use_images: bool = False, images_file: str = None, use_cwt: bool = False, pre_load: bool = True):
-        super().__init__(eeg_root=eeg_root, images_root=images_root,
+        super().__init__(eeg_root=eeg_root, images_root=images_root, sampling_rate=sampling_rate,
                          use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         self.use_original = use_original
 
@@ -127,6 +128,9 @@ class Kaneshiro(BaseEEGDataset):
         self._filenames = self.metadata['filename'].tolist()
         if self.use_cwt:
             self._cwt_names = ["cwt_" + fp for fp in self._filenames]
+            if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
+                print("CWT files not found, computing CWT for all trials...")
+                process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):

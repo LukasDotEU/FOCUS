@@ -65,6 +65,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         'images_root': dataset_conf['images_root'],
         'use_images': model_conf['use_images'],
         'use_cwt': model_conf['use_cwt'],
+        'sampling_rate': dataset_conf['sampling_rate'],
         'images_file': images_file,
         **dataset_conf.get('args', {})
     }

@@ -22,10 +22,11 @@ class BaseEEGDataset(Dataset):
            'cwt'      : torch.Tensor or None (if cwt not used)
     """
 
-    def __init__(self, eeg_root: str, images_root: str, use_images: bool, images_file:str, use_cwt: bool, pre_load: bool):
+    def __init__(self, eeg_root: str, images_root: str, sampling_rate: float, use_images: bool, images_file:str, use_cwt: bool, pre_load: bool):
         super().__init__()
         self.eeg_root = eeg_root
         self.images_root = images_root
+        self.sampling_rate = sampling_rate
         self.use_images = use_images
         self.images_file = images_file
         self.use_cwt = use_cwt

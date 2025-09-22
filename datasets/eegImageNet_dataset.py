@@ -4,6 +4,7 @@ import torch
 import concurrent.futures
 
 from datasets.base_dataset import BaseEEGDataset
+from feature_preprocessing.CAWMASASTST_eegcwt_preprocessing import process_dataset
 
 PTH_FILE_DIR = {
     'eeg_55_95_std.pth': 'eegimagenet_individual_pt_55_95',
@@ -62,7 +63,7 @@ def preprocess(pth_file: str, eeg_root: str):
     print(f"Saved {len(samples)} trials and labels to {out_dir}")
 
 class EEGImageNet(BaseEEGDataset):
-    def __init__(self, eeg_root: str, pth_file: str, images_root: str, 
+    def __init__(self, eeg_root: str, pth_file: str, images_root: str, sampling_rate: float,
                  use_images: bool = False, images_file: bool = None, use_cwt: bool = False, pre_load: bool = True):
         """
         PyTorch Dataset for preprocessed EEGImageNet samples.
@@ -75,7 +76,7 @@ class EEGImageNet(BaseEEGDataset):
              - image_labels.pt
         use_images: if False, __getitem__ returns no image
         """
-        super().__init__(eeg_root=eeg_root, images_root=images_root, 
+        super().__init__(eeg_root=eeg_root, images_root=images_root, sampling_rate=sampling_rate,
                          use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         self.pth_file = pth_file
 
@@ -98,6 +99,9 @@ class EEGImageNet(BaseEEGDataset):
         self._filenames = self.metadata['filename'].tolist()
         if self.use_cwt:
             self._cwt_names = ["cwt_" + fp for fp in self._filenames]
+            if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
+                print("CWT files not found, computing CWT for all trials...")
+                process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):
