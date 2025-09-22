@@ -30,7 +30,7 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [128]},
             "BiLSTM": {"hidden_channels": [128]},
@@ -54,7 +54,7 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [512, 1024]},  # TODO: Check if something else better
             "BiLSTM": {"hidden_channels": [512, 1024]},
@@ -78,7 +78,7 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [512, 1024]},  # TODO: Check if something else better
             "BiLSTM": {"hidden_channels": [512, 1024]},
@@ -102,7 +102,7 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [64]},
             "BiLSTM": {"hidden_channels": [64]},
@@ -126,7 +126,7 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [64]},
             "BiLSTM": {"hidden_channels": [64]},
@@ -136,7 +136,7 @@ DATASET_CONFIGS = [
         "name": "EOODDataset",
         "class": EOODDataset,
         "eeg_root": "../Datasets/EOOD/",
-        "images_root": "../Datasets/EOOD/TODO/",
+        "images_root": "../Datasets/EOOD/Images/",
         "sampling_rate": 1000,
         "time_steps": 1000,
         "num_electrodes": 64,
@@ -152,10 +152,10 @@ DATASET_CONFIGS = [
         },
         "model_args": {
             "NiceEEG": {
-                #"clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/NICE_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/EOOD/Images/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                #"clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [128]},
             "BiLSTM": {"hidden_channels": [128]},
@@ -340,8 +340,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "EOODDataset",
-        "model": "EEGNet",
+        "dataset": "EEGImageNet",
+        "model": "ATMS",
     },
     # Add more combinations as desired...
 ]

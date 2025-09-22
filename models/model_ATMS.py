@@ -330,7 +330,7 @@ class ATMS(BaseModel):
 
         load_dir = os.path.join(clip_centers_file)
         feature_center_names = np.load(load_dir, allow_pickle=True).item()
-        self.feature_centers = torch.from_numpy(feature_center_names['clip_center_features']).to(self.device)
+        self.feature_centers = torch.from_numpy(feature_center_names['clip_label_features']).to(self.device)
          
     def forward(self, batch):
         eeg = batch['eeg'] # [B, C, T]
