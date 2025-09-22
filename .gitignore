@@ -8,5 +8,6 @@ model_weights/
 
 wandb/
 slurm_outputs/
+results/
 
 *.pth
