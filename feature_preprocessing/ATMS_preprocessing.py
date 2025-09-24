@@ -94,6 +94,7 @@ def process_dataset(images_root, subfolders, class_text_labels):
         all_feats.append(feats.cpu())
 
     feats_tensor = torch.cat(all_feats, dim=0)
+    feats_tensor = torch.nn.functional.normalize(feats_tensor, p=2, dim=1)
     # build dict {class_folder: {imagename: feat}}
     feature_dict = {}
     for feat_vec, folder_name, img_name in zip(
@@ -106,13 +107,18 @@ def process_dataset(images_root, subfolders, class_text_labels):
 
     # === Compute CLIP text embeddings for class labels ===
     print(f"Encoding {len(class_text_labels)} class text labels in CLIP space...")
+    text_prompts = [f"This picture is {name}" for name in class_text_labels]
     text_inputs = processor(
-        text=class_text_labels, return_tensors="pt", padding=True, truncation=True
+        text=text_prompts, return_tensors="pt", padding=True, truncation=True
     ).to(device)
     with torch.no_grad():
         label_feats = model.module.get_text_features(**text_inputs).cpu().numpy()
 
-    result = {"clip_label_features": label_feats, "clip_label_names": class_text_labels}
+    norms = np.linalg.norm(label_feats, axis=1, keepdims=True)
+    norms = np.maximum(norms, 1e-10)   # avoid div-by-zero
+    label_feats = label_feats / norms
+
+    result = {"clip_label_features": label_feats, "clip_label_prompts": text_prompts}
 
     labels_feat_path = os.path.join(images_root, "ATMS_clip_label_features.npy")
     # Save the result as a dataset-specific file
