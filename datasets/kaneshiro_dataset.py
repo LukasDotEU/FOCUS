@@ -9,12 +9,12 @@ from feature_preprocessing import CAWMASASTST_eegcwt_preprocessing
 
 # Mapping from class ID to human-readable class label
 CLASS_TEXT_DICT = {
-    1: 'Human Body',
-    2: 'Human Face',
-    3: 'Animal Body',
-    4: 'Animal Face',
-    5: 'Fruit Vegetable',
-    6: 'Inanimate Object'
+    '1': 'Human Body',
+    '2': 'Human Face',
+    '3': 'Animal Body',
+    '4': 'Animal Face',
+    '5': 'Fruit Vegetable',
+    '6': 'Inanimate Object'
 }
 
 def preprocess(eeg_root: str, use_original: bool):
