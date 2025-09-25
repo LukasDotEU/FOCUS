@@ -55,8 +55,9 @@ def process_dataset(images_root, subfolders, class_text_labels):
     # for individual image feature saving
     folder_names = []
     image_names = []
+    text_prompts = []
 
-    for condition_id, subfolder in enumerate(subfolders):
+    for condition_id, (subfolder, class_text_label) in enumerate(zip(subfolders, class_text_labels)):
         folder_path = os.path.join(images_root, subfolder)
         file_names = [
             e.name
@@ -64,6 +65,7 @@ def process_dataset(images_root, subfolders, class_text_labels):
             if e.is_file() and e.name.lower().endswith((".jpg", ".png", ".jpeg"))
         ]
         for fname in file_names:
+            text_prompts.append(f"This picture is {class_text_label}")
             image_paths.append(os.path.join(folder_path, fname))
             class_ids.append(condition_id)
 
@@ -95,12 +97,25 @@ def process_dataset(images_root, subfolders, class_text_labels):
 
     feats_tensor = torch.cat(all_feats, dim=0)
     feats_tensor = torch.nn.functional.normalize(feats_tensor, p=2, dim=1)
+
+    # === Compute CLIP text embeddings for class labels ===
+    text_inputs = processor(
+        text=text_prompts, return_tensors="pt", padding=True, truncation=True
+    ).to(device)
+    with torch.no_grad():
+        label_feats = model.module.get_text_features(**text_inputs).cpu().numpy()
+
+    norms = np.linalg.norm(label_feats, axis=1, keepdims=True)
+    norms = np.maximum(norms, 1e-10)   # avoid div-by-zero
+    label_feats = label_feats / norms
+
+
     # build dict {class_folder: {imagename: feat}}
     feature_dict = {}
-    for feat_vec, folder_name, img_name in zip(
-        feats_tensor.numpy(), folder_names, image_names
+    for feat_vec, folder_name, img_name, label_feat in zip(
+        feats_tensor.numpy(), folder_names, image_names, label_feats
     ):
-        feature_dict.setdefault(folder_name, {})[img_name] = feat_vec
+        feature_dict.setdefault(folder_name, {})[img_name] = np.stack([feat_vec, label_feat], axis=0)
     imgs_feat_path = os.path.join(images_root, "ATMS_clip_individual_features.pth")
     torch.save(feature_dict, imgs_feat_path)
     print(f"Saved individual ATMS Clip features at {imgs_feat_path}")
