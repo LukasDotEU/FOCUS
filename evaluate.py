@@ -258,10 +258,10 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
 
         print(
             f"[{split_name}] Test results → "
-            f"Acc: {test_metrics['accuracy']:.4f}, F1: {test_metrics['f1']:.4f}, "
-            f"Precision: {test_metrics['precision']:.4f}, Recall: {test_metrics['recall']:.4f}, "
-            f"Kappa: {test_metrics['cohen_kappa']:.4f}, AUC: {test_metrics['auc']:.4f}, "
-            f"Time: {test_time:.4f}s", flush=True
+            f"Acc: {test_metrics['accuracy']:.4f}, Balanced Acc: {test_metrics['balanced_acc']:.4f}, "
+            f"F1: {test_metrics['f1']:.4f}, Precision: {test_metrics['precision']:.4f}, "
+            f"Recall: {test_metrics['recall']:.4f}, Kappa: {test_metrics['cohen_kappa']:.4f}, "
+            f"AUC: {test_metrics['auc']:.4f}, Time: {test_time:.4f}s", flush=True
         )
 
         # Clean up
