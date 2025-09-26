@@ -142,9 +142,11 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             "total_params": total_params,
             "trainable_params": trainable_params,
         }
+        run_id = f"{dataset_conf['name']}_{model_conf['name']}_{split_name}"
         wandb.init(
-            project="eeg-object-eval",  #eeg-object-eval-EEGImageNet
-            name=f"{dataset_conf['name']}_{model_conf['name']}_{split_name}",
+            project="eeg-object-eval",  #FOCUS-EEGImageNet
+            id=run_id,
+            name=run_id,
             config=wandb_config,
             mode="disabled" if testing else "online",
         )
