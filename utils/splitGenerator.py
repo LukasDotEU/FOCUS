@@ -5,7 +5,7 @@ from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit, Str
 class SplitGenerator:
     """
     Encapsulates outer- and inner-split creation, ensuring no image_idx appears in more than one partition.
-      1) Per-subject (80/20 within each subject, stratified on class_idx)
+      1) Per-subject (90/10 within each subject, stratified on class_idx)
       2) Cross-subject (LOSO: leave one subject out for test, rest→train)
       3) All-subjects 10-fold CV stratified on (class_idx, subject)
 
@@ -43,7 +43,7 @@ class SplitGenerator:
 
     def get_per_subject_splits(self) -> list[dict]:
         """
-        For each subject s, do an 80/20 split within that subject block,
+        For each subject s, do an 90/10 split within that subject block (with innersplit 80/10/10),
         stratified by class_idx. Return a list of dicts:
             { 'name': str, 'train_idx': [...], 'test_idx': [...] }.
         """
@@ -109,7 +109,7 @@ class SplitGenerator:
             train_gids = self.unique_gids[train_pos]
             test_gids  = self.unique_gids[test_pos]
 
-            # 4) Expand back to full sample indices (all 4 reps per group)
+            # 4) Expand back to full sample indices (all reps per group)
             train_idx = [idx for gid in train_gids for idx in self.group_to_samples[gid]]
             test_idx  = [idx for gid in test_gids  for idx in self.group_to_samples[gid]]
 
