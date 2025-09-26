@@ -4,9 +4,9 @@ preprocess_EOOD.py
 
 This script preprocesses anonymized raw FIF files and their corresponding CSV files
 embedded in an HDF5 file (created by anonymize_and_package_dataset.py). It applies
-filtering, notch filtering, and re-referencing to the raw EEG data, extracts events
-from annotations, and extracts epochs either per event/image or per sequence. The epochs
-can undergo baseline correction and optionally z-score normalization before being saved,
+filtering, notch filtering, re-referencing, and resampling (downsampling).
+It extracts events from annotations, and extracts epochs either per event/image or per sequence.
+The epochs can undergo baseline correction and optionally z-score normalization before being saved,
 along with metadata, into an output HDF5 file.
 
 Usage Example:
@@ -16,7 +16,8 @@ python preprocess_EOOD.py \
   --in_csv_h5 anonymized_and_csvs.h5 \
   --out_h5 processed_epochs_new.h5 \
   --use_sequence \
-  --baseline_t -0.2 0.0
+  --baseline_t -0.2 0.0 \
+  --resample_sfreq 250.0
 
 Required Inputs:
 ----------------
@@ -26,12 +27,13 @@ Required Inputs:
                   the path /sequences/subject_{:02d}/session_{}/csv.
 --out_h5          Output HDF5 file where extracted epochs and metadata will be saved.
 
-Optional Filtering Options:
+Optional Processing Options:
 ---------------------------
---high_pass             High-pass cutoff frequency (Hz). Default is 0.1 Hz.
---low_pass              Low-pass cutoff frequency (Hz). Default is 100.0 Hz.
---notch_freqs           One or more notch filter frequencies (Hz) to remove. Default is [50.0].
---no_average_reference  Disable average reference re-referencing when set.
+--resample_sfreq       Desired sampling frequency (Hz). If provided, raw data will be resampled to this frequency.
+--high_pass            High-pass cutoff frequency (Hz). Default is 0.1 Hz.
+--low_pass             Low-pass cutoff frequency (Hz). Default is 100.0 Hz.
+--notch_freqs          One or more notch filter frequencies (Hz) to remove. Default is [50.0].
+--no_average_reference Disable average reference re-referencing when set.
 
 Epoch Extraction Options:
 -------------------------
@@ -116,6 +118,47 @@ def get_events(raw: mne.io.BaseRaw, annotations_df: pd.DataFrame) -> np.ndarray:
             f"does not match CSV rows ({len(annotations_df)})"
         )
     return events
+
+
+def resample_raw(
+    raw: mne.io.BaseRaw,
+    resample_freq: float,
+    events: np.ndarray,
+    verbose: bool = False,
+) -> Tuple[mne.io.BaseRaw, np.ndarray, bool]:
+    """
+    Resample the raw EEG data to a specified sampling frequency.
+    Parameters:
+        raw (mne.io.BaseRaw): The raw EEG data with preload=True.
+        resample_freq (float): The desired sampling frequency (Hz).
+        events (np.ndarray): The events array extracted from the raw data.
+        verbose (bool): If True, print resampling information.
+    Returns:
+        raw (mne.io.BaseRaw): The resampled raw data.
+        events (np.ndarray): The updated events array after resampling.
+        did_resample (bool): True if resampling was performed, False otherwise.
+    """
+    if resample_freq is not None:
+        orig_sfreq = float(raw.info["sfreq"])
+        if resample_freq <= 0:
+            print(
+                f"  Invalid resample frequency {resample_freq}. Must be > 0. Skipping resample."
+            )
+        elif resample_freq >= orig_sfreq:
+            print(
+                f"  WARNING: requested resample frequency {resample_freq} is >= original sampling rate {orig_sfreq}. Skipping resample."
+            )
+        else:
+            try:
+                if verbose:
+                    print(f"  Resampling from {orig_sfreq} Hz to {resample_freq} Hz...")
+                resampled_raw, resampled_events = raw.resample(
+                    resample_freq, npad="auto", events=events, verbose=False
+                )
+                return resampled_raw, resampled_events, True
+            except Exception as e:
+                print(f"  ERROR during resampling: {e}. Skipping file.")
+    return raw, events, False
 
 
 def apply_baseline(
@@ -272,6 +315,7 @@ def save_to_h5(
     out_fname: str,
     epochs: List[np.ndarray],
     metas: List[Dict],
+    recording_sfreq: float,
     sfreq: float,
     ch_names: List[str],
 ) -> None:
@@ -282,6 +326,7 @@ def save_to_h5(
         out_fname (str): The output filename for the HDF5 file.
         epochs (List[np.ndarray]): A list of epoch data arrays.
         metas (List[Dict]): A list of metadata dictionaries corresponding to each epoch.
+        recording_sfreq (float): The original recording sampling frequency of the data.
         sfreq (float): The sampling frequency of the data.
         ch_names (List[str]): List of channel names.
 
@@ -289,6 +334,7 @@ def save_to_h5(
         None
     """
     with h5py.File(out_fname, "w") as f:
+        f.attrs["recording_sfreq"] = float(recording_sfreq)
         f.attrs["sfreq"] = float(sfreq)
         f.attrs["channels"] = ch_names
         for idx, (epoch, meta) in enumerate(zip(epochs, metas)):
@@ -341,12 +387,14 @@ def run_preprocessing(
     average_reference: bool = True,
     zscore_norm: bool = True,
     use_sequence: bool = False,
+    resample_freq: Optional[float] = None,
 ) -> int:
     """
     Run the complete preprocessing pipeline:
       - Loop over subjects and sessions.
       - Load raw FIF and CSV data.
       - Preprocess the raw data.
+      - Optionally resample (downsample) the raw data.
       - Extract events and epochs.
       - Save the processed epochs and metadata into an HDF5 file.
 
@@ -361,6 +409,7 @@ def run_preprocessing(
         average_reference (bool): Whether to apply average referencing.
         zscore_norm (bool): Whether to perform z-score normalization.
         use_sequence (bool): Whether to extract epochs per sequence (True) or per event (False).
+        resample_freq (Optional[float]): If provided, resample the raws to this sampling rate (Hz).
 
     Returns:
         int: Exit code. 0 indicates success, 1 indicates that no epochs were extracted.
@@ -416,6 +465,8 @@ def run_preprocessing(
                 )
                 continue
 
+            raw, events, did_resample = resample_raw(raw, resample_freq, events)
+
             last_raw_info = raw.info
 
             try:
@@ -447,10 +498,11 @@ def run_preprocessing(
 
     picks = mne.pick_types(last_raw_info, meg=False, eeg=True, stim=False)
     ch_names = [last_raw_info["ch_names"][p] for p in picks]
-    sfreq = float(last_raw_info["sfreq"])
+    recording_sfreq = float(last_raw_info["sfreq"])
+    resample_freq = resample_freq if did_resample else recording_sfreq
 
     print(f"\nSaving a total of {len(all_epochs)} epochs to {out_h5}")
-    save_to_h5(out_h5, all_epochs, all_meta, sfreq, ch_names)
+    save_to_h5(out_h5, all_epochs, all_meta, recording_sfreq, resample_freq, ch_names)
 
     print("Done.")
     return 0
@@ -528,6 +580,12 @@ if __name__ == "__main__":
             action="store_true",
             default=False,
             help="Extract epochs per sequence (if not set, extracts per event/image)",
+        )
+        parser.add_argument(
+            "--resample_sfreq",
+            type=float,
+            default=None,
+            help="If provided, resample raws to this sampling frequency (Hz). Use to downsample (e.g. 250).",
         )
         return parser.parse_args()
 

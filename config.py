@@ -133,7 +133,7 @@ DATASET_CONFIGS = [
         },
     },
     {
-        "name": "EOODDataset",
+        "name": "EOODDatasetAllImages",
         "class": EOODDataset,
         "eeg_root": "../Datasets/EOOD/",
         "images_root": "../Datasets/EOOD/Images/",
@@ -142,13 +142,77 @@ DATASET_CONFIGS = [
         "num_electrodes": 64,
         "num_classes": 10,
 		"args": {
-            "use_sequence": False,
+            "sequence_ordinals": [1, 2, 3, 4],
             "baseline_t": [-0.2, 0.0],
-            "high_pass": 0.1,
-            "low_pass": 100.0,
+            "high_pass": 1.0,
+            "low_pass": 95.0,
             "notch_freqs": [50.0],
+            "resample_freq": None,
             "average_reference": True,
             "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EOOD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [128]},
+            "BiLSTM": {"hidden_channels": [128]},
+        },
+    },
+    {
+        "name": "EOODDatasetFirstImage",
+        "class": EOODDataset,
+        "eeg_root": "../Datasets/EOOD/",
+        "images_root": "../Datasets/EOOD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EOOD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [128]},
+            "BiLSTM": {"hidden_channels": [128]},
+        },
+    },
+    {
+        "name": "EOODDatasetLastImage",
+        "class": EOODDataset,
+        "eeg_root": "../Datasets/EOOD/",
+        "images_root": "../Datasets/EOOD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [4],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
         },
         "model_args": {
             "NiceEEG": {
@@ -340,8 +404,40 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "EEGImageNet",
-        "model": "ATMS",
+        "dataset": "EOODDatasetFirstImage",
+        "model": "EEGNet",
+    },
+    {
+        "dataset": "EOODDatasetFirstImage",
+        "model": "NiceEEG",
+    },
+    {
+        "dataset": "EOODDatasetFirstImage",
+        "model": "CBraMod",
+    },
+    {
+        "dataset": "EOODDatasetLastImage",
+        "model": "EEGNet",
+    },
+    {
+        "dataset": "EOODDatasetLastImage",
+        "model": "NiceEEG",
+    },
+    {
+        "dataset": "EOODDatasetLastImage",
+        "model": "CBraMod",
+    },
+    {
+        "dataset": "EOODDatasetAllImages",
+        "model": "EEGNet",
+    },
+    {
+        "dataset": "EOODDatasetAllImages",
+        "model": "NiceEEG",
+    },
+    {
+        "dataset": "EOODDatasetAllImages",
+        "model": "CBraMod",
     },
     # Add more combinations as desired...
 ]

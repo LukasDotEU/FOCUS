@@ -16,10 +16,12 @@ class EOODDataset(BaseEEGDataset):
         use_cwt: bool = False,
         pre_load: bool = True,
         use_sequence: bool = False,
+        sequence_ordinals: list[int] = [1, 2, 3, 4],
         baseline_t: list[float] = [-0.2, 0.0],
         high_pass: float = 0.1,
         low_pass: float = 100.0,
         notch_freqs: list[float] = [50.0],
+        resample_freq: float = None,
         average_reference: bool = True,
         zscore_norm: bool = True,
     ):
@@ -46,10 +48,11 @@ class EOODDataset(BaseEEGDataset):
         notch_str = "-".join(str(nf) for nf in notch_freqs)
         base_name = f"processed_epochs_baseline_{t0}_{t1}_hp{high_pass}_lp{low_pass}_notch{notch_str}"
         # append boolean flags so filename encodes preprocessing choices
+        resample_flag = f"resample{resample_freq}" if resample_freq is not None else "noresample"
         avgref_flag = "avgref1" if average_reference else "avgref0"
         zscore_flag = "zscore1" if zscore_norm else "zscore0"
         seq_flag = "seq1" if use_sequence else "seq0"
-        base_name = f"{base_name}_{avgref_flag}_{zscore_flag}_{seq_flag}.h5"
+        base_name = f"{base_name}_{resample_flag}_{avgref_flag}_{zscore_flag}_{seq_flag}.h5"
 
         self.preproc_path = os.path.join(os.path.dirname(eeg_root), base_name)
         
@@ -65,6 +68,7 @@ class EOODDataset(BaseEEGDataset):
                 high_pass=high_pass,
                 low_pass=low_pass,
                 notch_freqs=notch_freqs,
+                resample_freq=resample_freq,
                 average_reference=average_reference,
                 zscore_norm=zscore_norm,
                 use_sequence=use_sequence,
@@ -78,9 +82,9 @@ class EOODDataset(BaseEEGDataset):
         # Filter metadata
         self.metadata = self.metadata[self.metadata["type"] == "standard"] # keep only standard trials and no jitter trials
 
-        # Filter metadata to only keep rows with sequence_ordinal equal to 1, if available
-        #if "sequence_ordinal" in self.metadata.columns:
-        #    self.metadata = self.metadata[self.metadata["sequence_ordinal"] == 1]
+        # Filter metadata to only keep rows with sequence_ordinal equal to 4, if available
+        if "sequence_ordinal" in self.metadata.columns:
+            self.metadata = self.metadata[self.metadata["sequence_ordinal"].isin(sequence_ordinals)]
         
         # Reset index and add a new 'idx' column representing the new order, then set it as the index.
         self.metadata.reset_index(drop=True, inplace=True)
