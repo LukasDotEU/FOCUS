@@ -7,8 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # --- CONFIGURATION ---
-PROJECT_PATH = "lukas_heinrich-university-of-otago/eeg-object-eval-EEGImageNet"
-#PROJECT_PATH = "lukas_heinrich-university-of-otago/eeg-object-eval"
+#PROJECT_PATH = "lukas_heinrich-university-of-otago/FOCUS-EEGImageNet"
+PROJECT_PATH = "lukas_heinrich-university-of-otago/FOCUS"
 RESULTS_ROOT = "results"
 
 dataset_details = {
@@ -28,10 +28,26 @@ dataset_details = {
         "display_name": "averaged ThingsEEG2",
         "chance_level": 1/1654,
     },
-    "EOOD": {
-        "display_name": "EOOD",
+    "EOODDatasetFirstImage": {
+        "display_name": "EOOD using the First Image",
         "chance_level": 1/10,
-    }
+    },
+    "EOODDatasetSecondImage": {
+        "display_name": "EOOD using the Second Image",
+        "chance_level": 1/10,
+    },
+    "EOODDatasetThirdImage": {
+        "display_name": "EOOD using the Third Image",
+        "chance_level": 1/10,
+    },
+    "EOODDatasetLastImage": {
+        "display_name": "EOOD using the Last Image",
+        "chance_level": 1/10,
+    },
+    "EOODDatasetAllImages": {
+        "display_name": "EOOD using the All Images",
+        "chance_level": 1/10,
+    },
 }
 
 # list of metrics to process
@@ -47,8 +63,8 @@ METRICS = [
 
 
 # Order in which models will appear in the plot
-MODEL_ORDER = ["ATMS", "BiLSTM", "EEGClip", "CAWMASASTST",
-               "NiceEEG", "EEGNet", "EEGChannelNet", "CBraMod"]
+MODEL_ORDER = ["BiLSTM", "EEGClip", "CAWMASASTST","NiceEEG",
+               "ATMS", "EEGNet", "EEGChannelNet", "CBraMod"]
 
 # Mapping for display names for split types
 SPLIT_LABELS = {
