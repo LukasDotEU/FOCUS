@@ -1,3 +1,4 @@
+import copy
 import os
 import json
 import argparse
@@ -108,7 +109,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         # Instantiate model
         ModelClass = model_conf['class']
         model_name = model_conf['name']
-        model_args = model_conf['args'].copy()
+        model_args = copy.deepcopy(model_conf['args'])
 
         # Give ATMS model info about number of subjects it's being trained with for subject specific logic
         if model_name == "ATMS":
@@ -142,11 +143,10 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             "total_params": total_params,
             "trainable_params": trainable_params,
         }
-        run_id = f"{dataset_conf['name']}_{model_conf['name']}_{split_name}"
+        run_name = f"{dataset_conf['name']}_{model_conf['name']}_{split_name}"
         wandb.init(
-            project="eeg-object-eval",  #FOCUS-EEGImageNet
-            id=run_id,
-            name=run_id,
+            project="FOCUS",  #FOCUS-EEGImageNet
+            name=run_name,
             config=wandb_config,
             mode="disabled" if testing else "online",
         )

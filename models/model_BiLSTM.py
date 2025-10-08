@@ -21,7 +21,7 @@ class BiLSTM(BaseModel):
         self.num_electrodes = num_electrodes
         self.lr = lr
         self.weight_decay = weight_decay
-        self.hidden_channels = hidden_channels
+        self.hidden_channels = list(hidden_channels) # deep copy
         self.hidden_channels.append(self.num_classes)
 
         self.lstm = nn.LSTM(
