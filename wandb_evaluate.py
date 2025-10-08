@@ -51,15 +51,15 @@ dataset_details = {
 }
 
 # list of metrics to process
-METRICS = [
-    "test_accuracy",
-    "test_balanced_acc",
-    "test_f1",
-    "test_precision",
-    "test_recall",
-    "test_cohen_kappa",
-    "test_auc",
-]
+METRICS = {
+    "test_accuracy": "Accuracy",
+    "test_balanced_acc": "Balanced Accuracy",
+    "test_f1": "F1 Score",
+    "test_precision": "Precision",
+    "test_recall": "Recall",
+    "test_cohen_kappa": "Cohen's Kappa",
+    "test_auc": "AUC",
+}
 
 
 # Order in which models will appear in the plot
@@ -219,7 +219,7 @@ def create_numeric_pivots(summary_df: pd.DataFrame, metric_col: str):
 
 
 def plot_results(pivot_mean: pd.DataFrame, pivot_std: pd.DataFrame, 
-                 metric: str, dataset_display_name: str, out_dir: str, 
+                 metric: str, metric_display: str, dataset_display_name: str, out_dir: str, 
                  chance_level: float):
     """
     Create a bar plot for the metric with error bars showing std.
@@ -256,12 +256,12 @@ def plot_results(pivot_mean: pd.DataFrame, pivot_std: pd.DataFrame,
     if is_accuracy and (chance_level is not None):
         chance_pct = chance_level * 100.0
         ax.axhline(chance_pct, color='red', linestyle='--', linewidth=1,
-                   label=f'Chance level ({chance_pct:.3f}%)')
+                   label=f'Chance level ({f'{chance_pct:.3f}'.rstrip('0').rstrip('.')}%)')
     
     # Y label and title
-    ylabel = f"{metric} (%)" if is_accuracy else metric
+    ylabel = f"{metric_display} (%)" if is_accuracy else metric_display
     ax.set_ylabel(ylabel, fontsize=16)
-    ax.set_title(f"{dataset_display_name} - {metric} Across Split Strategies", fontsize=18)
+    ax.set_title(f"{dataset_display_name} - {metric_display}", fontsize=18)
     ax.set_xticks(x)
     ax.set_xticklabels(models, rotation=45, ha="right", fontsize=14)
 
@@ -309,13 +309,15 @@ def save_summaries(summary_df: pd.DataFrame, metric: str, out_dir: str):
 
 # --- MAIN PROCESS ---
 def process_metric_for_dataset(final_df: pd.DataFrame, dataset_name: str,
-                               dataset_display_name: str, metric: str, out_root: str,
+                               dataset_display_name: str, metric: tuple[str, str], out_root: str,
                                chance_level: float):
     """
     For a given dataset and metric: compute summary, create pivot tables,
     drop empty splits/models, plot and save summary & plot.
     """
     df_ds = final_df[final_df["dataset_name"] == dataset_name].copy()
+
+    metric, metric_display = metric
 
     print(f"Processing dataset='{dataset_name}', metric='{metric}'...")
     summary_df = compute_summary(df_ds, metric)
@@ -330,7 +332,7 @@ def process_metric_for_dataset(final_df: pd.DataFrame, dataset_name: str,
     save_summaries(summary_df, metric, out_dir)
 
     # plot and save
-    plot_results(pivot_mean, pivot_std, metric, dataset_display_name, out_dir, chance_level)
+    plot_results(pivot_mean, pivot_std, metric, metric_display, dataset_display_name, out_dir, chance_level)
 
 
 def main():
@@ -351,14 +353,14 @@ def main():
 
     for ds_name, ds_display, chance_level in to_process:
         print(f"\n=== Processing dataset: {ds_name} ===")
-        for metric in METRICS:
+        for metric in METRICS.items():
             try:
                 process_metric_for_dataset(final_df, ds_name, ds_display, metric,
                                            RESULTS_ROOT, chance_level)
             except KeyError as e:
-                print(f"Skipping metric '{metric}' due to missing columns: {e}")
+                print(f"Skipping metric '{metric[0]}' due to missing columns: {e}")
             except Exception as e:
-                print(f"Unexpected error processing metric '{metric}': {e}")
+                print(f"Unexpected error processing metric '{metric[0]}': {e}")
 
     print("\nAll done. Results saved under:", os.path.abspath(RESULTS_ROOT))
 
