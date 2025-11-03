@@ -130,6 +130,9 @@ class BaseModel(nn.Module):
         all_labels = []
         all_scores = []    # e.g., softmax probabilities
 
+        # Prepare per-sequence tracking if requested
+        per_seq_counts = {} if test_pred else None
+
         with torch.no_grad():
             for batch in dataloader:
                 # Move tensors to the target device.
@@ -149,6 +152,21 @@ class BaseModel(nn.Module):
                 if scores is not None:
                     all_scores.append(scores)
 
+                # Update per-sequence correctness counters when requested and when sequence_index exists
+                if test_pred and 'sequence_index' in batch:
+                    # preds and class_idx are tensors of shape [batch_size]; iterate per example
+                    seq_idxs = batch['sequence_index']
+                    labels = batch['class_idx']
+                    for i in range(preds.size(0)):
+                        seq = int(seq_idxs[i].item())
+                        pred_i = int(preds[i].item())
+                        label_i = int(labels[i].item())
+                        if seq not in per_seq_counts:
+                            per_seq_counts[seq] = {'correct': 0, 'total': 0}
+                        per_seq_counts[seq]['total'] += 1
+                        if pred_i == label_i:
+                            per_seq_counts[seq]['correct'] += 1
+
         # Concatenate tensors and convert to numpy arrays when applicable.
         all_preds = torch.cat(all_preds).cpu().numpy()
         all_labels = torch.cat(all_labels).cpu().numpy()
@@ -160,6 +178,19 @@ class BaseModel(nn.Module):
             y_score=all_scores,
             test_pred=test_pred
         )
+
+        # Add per-sequence accuracy info to results if requested
+        if test_pred and per_seq_counts is not None:
+            per_sequence = {}
+            for seq, counts in per_seq_counts.items():
+                total = counts['total']
+                correct = counts['correct']
+                per_sequence[int(seq)] = {
+                    'correct': int(correct),
+                    'total': int(total),
+                    'accuracy': float(correct) / float(total) if total > 0 else 0.0
+                }
+            results['per_sequence'] = per_sequence
 
         avg_loss = running_loss / n_batches
         return avg_loss, results
