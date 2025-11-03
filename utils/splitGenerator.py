@@ -14,10 +14,11 @@ class SplitGenerator:
       carves out (train_inner_idx, val_idx) according to the same rules.
     """
 
-    def __init__(self, metadata: pd.DataFrame):
+    def __init__(self, metadata: pd.DataFrame, factorizeBlocks: bool = True):
         """
         metadata: DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx'].
                   We assume the DataFrame's index matches the dataset's sample indices (0..N-1).
+        factorizeBlocks: whether to factorize by (sequence_index) - useful when using multiple small blocks.
         """
         self.meta = metadata
         self.subject_ids = sorted(self.meta['subject'].unique().tolist())
@@ -25,7 +26,12 @@ class SplitGenerator:
 
         ## Necessary for k-fold CV
         # 1) factorize (image_idx, subject) into a single group_id
-        groups = list(zip(self.meta['image_idx'], self.meta['subject']))
+        if "sequence_index" in self.meta.columns and factorizeBlocks:
+            groups = list(zip(self.meta['subject'], self.meta['session_id'], self.meta['sequence_index']))
+            print("Factorizing groups by (subject, session_id, sequence_index)")
+        else:
+            groups = list(zip(self.meta['image_idx'], self.meta['subject']))
+            print("Factorizing groups by (image_idx, subject)")
         self.meta['group_id'], _ = pd.factorize(groups)
 
         # 2) build group_id → all sample idx (all repetitions)
@@ -46,29 +52,31 @@ class SplitGenerator:
         For each subject s, do an 90/10 split within that subject block (with innersplit 80/10/10),
         stratified by class_idx. Return a list of dicts:
             { 'name': str, 'train_idx': [...], 'test_idx': [...] }.
+
+        NOTE: Split at the group-unit level (group_id) so that all samples belonging to the same
+        atomic unit (e.g. session_id+sequence_index or image_idx) stay together.
         """
         splits = []
         for sid in self.subject_ids:
-            # group by image within subject
+            # group by factorized group_id within subject (these are the atomic units)
             sub_meta = self.meta[self.meta['subject'] == sid]
-            img_ids = sub_meta['image_idx'].unique().tolist()
-            if len(img_ids) < 2:
-                print(f"Subject {sid} has <2 samples → skipping per-subject split.")
+            unit_gids = sub_meta['group_id'].unique().tolist()
+            if len(unit_gids) < 2:
+                print(f"Subject {sid} has <2 units → skipping per-subject split.")
                 continue
 
-            # label each image by its class (assume consistent)
-            img_lbl = [sub_meta[sub_meta['image_idx'] == img]['class_idx'].iat[0] for img in img_ids]
+            # label each unit by its class (assume consistent within unit)
+            unit_lbl = [sub_meta[sub_meta['group_id'] == gid]['class_idx'].iat[0] for gid in unit_gids]
             sss = StratifiedShuffleSplit(n_splits=1, test_size=0.1, random_state=42)
 
-            # Only one split, so we can use StratifiedShuffleSplit directly 
-            # (would need to use kfold instead if i want to do 10-fold cross validation on each subject as well):
-            train_pos, test_pos = next(sss.split(img_ids, img_lbl))
+            train_pos, test_pos = next(sss.split(unit_gids, unit_lbl))
 
-            train_set = set(img_ids[i] for i in train_pos)
-            test_set  = set(img_ids[i] for i in test_pos)
+            train_gids = [unit_gids[i] for i in train_pos]
+            test_gids  = [unit_gids[i] for i in test_pos]
 
-            train_idx = sub_meta[sub_meta['image_idx'].isin(train_set)]['idx'].tolist()
-            test_idx  = sub_meta[sub_meta['image_idx'].isin(test_set)]['idx'].tolist()
+            # expand groups back to sample indices
+            train_idx = [idx for gid in train_gids for idx in self.group_to_samples[gid]]
+            test_idx  = [idx for gid in test_gids  for idx in self.group_to_samples[gid]]
 
             splits.append({'name': f'per_subject_{sid}', 'type': 'per_subject', 'train_idx': train_idx, 'test_idx': test_idx})
             print(f"per_subject_{sid}: {len(train_idx)} train / {len(test_idx)} test")
@@ -98,7 +106,7 @@ class SplitGenerator:
     def get_stratified_kfold_splits(self, n_splits: int = 10) -> list[dict]:
         """
         10-fold CV: approximate stratification on (class_idx, subject), 
-        grouping by unique (image_idx, subject) and then expanding repetitions.
+        grouping by unique group_id (already factorized) and then expanding repetitions.
         """
         skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
         splits = []
@@ -123,22 +131,23 @@ class SplitGenerator:
         return splits
 
     def get_inner_split(self, outer_train_idx: list[int], split_name: str):
-        # inner splits also group by image
+        # inner splits also group by the factorized group_id
         subset = self.meta.loc[outer_train_idx]
         if split_name.startswith('per_subject_'):
-            imgs = subset['image_idx'].unique().tolist()
-            if len(imgs) < 2:
+            # operate on group units inside the outer_train subset
+            unit_gids = subset['group_id'].unique().tolist()
+            if len(unit_gids) < 2:
                 print(f"[{split_name}] outer_train < 2 → no inner split. "
                       f"Returning all {len(outer_train_idx)} as train_inner, 0 as val.")
                 return outer_train_idx, []
-            lbl = [subset[subset['image_idx'] == img]['class_idx'].iat[0] for img in imgs]
+            lbl = [subset[subset['group_id'] == gid]['class_idx'].iat[0] for gid in unit_gids]
             sss = StratifiedShuffleSplit(n_splits=1, test_size=0.1/0.9, random_state=42)
-            train_pos, val_pos = next(sss.split(imgs, lbl))
-            train_imgs = set(imgs[i] for i in train_pos)
-            val_set = set(imgs[i] for i in val_pos)
+            train_pos, val_pos = next(sss.split(unit_gids, lbl))
+            train_gids = [unit_gids[i] for i in train_pos]
+            val_gids   = [unit_gids[i] for i in val_pos]
 
-            train_inner = subset[subset['image_idx'].isin(train_imgs)]['idx'].tolist()
-            val_idx = subset[subset['image_idx'].isin(val_set)]['idx'].tolist()
+            train_inner = [i for gid in train_gids for i in self.group_to_samples[gid]]
+            val_idx = [i for gid in val_gids for i in self.group_to_samples[gid]]
             
         elif split_name.startswith('cross_subject_LOSO_'):
             # pick subject with fewest samples in outer_train

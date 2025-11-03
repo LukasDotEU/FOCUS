@@ -75,8 +75,9 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
     full_dataset: BaseEEGDataset = DSClass(pre_load=pre_load, **ds_kwargs)
     num_workers = 0 if pre_load else 4
 
+    factorizeBlocks = dataset_conf.get('factorizeBlocks', True)
     # Build outer splits
-    splitter = SplitGenerator(full_dataset.metadata)
+    splitter = SplitGenerator(full_dataset.metadata, factorizeBlocks)
     per_subj_splits = splitter.get_per_subject_splits()
     cross_subj_splits = splitter.get_cross_subject_splits()
     all_subj_cv_splits = splitter.get_stratified_kfold_splits(n_splits=10)

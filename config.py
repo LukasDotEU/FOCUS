@@ -183,9 +183,42 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
             },
-            "EEGClip": {"hidden_channels": [128]},
-            "BiLSTM": {"hidden_channels": [128]},
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
         },
+		"factorizeBlocks": False,
+    },
+    {
+        "name": "EOODDatasetAllImagesBlockFactorized",
+        "class": EOODDataset,
+        "eeg_root": "../Datasets/EOOD/",
+        "images_root": "../Datasets/EOOD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1, 2, 3, 4],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EOOD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+		"factorizeBlocks": True,
     },
     {
         "name": "EOODDatasetFirstImage",
@@ -214,8 +247,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
             },
-            "EEGClip": {"hidden_channels": [128]},
-            "BiLSTM": {"hidden_channels": [128]},
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
         },
     },
     {
@@ -245,8 +278,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
             },
-            "EEGClip": {"hidden_channels": [128]},
-            "BiLSTM": {"hidden_channels": [128]},
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
         },
     },
     {
@@ -276,8 +309,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
             },
-            "EEGClip": {"hidden_channels": [128]},
-            "BiLSTM": {"hidden_channels": [128]},
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
         },
     },
     {
@@ -307,8 +340,8 @@ DATASET_CONFIGS = [
             "ATMS": {
                 "clip_centers_file": "../Datasets/EOOD/Images/ATMS_clip_label_features.npy",
             },
-            "EEGClip": {"hidden_channels": [128]},
-            "BiLSTM": {"hidden_channels": [128]},
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
         },
     },
     # Add more dataset configurations here...
@@ -490,12 +523,12 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "ThingsEEG2FirstTrial",
-        "model": "CBraMod",
+        "dataset": "EOODDatasetAllImages",
+        "model": "BiLSTM",
     },
     {
-        "dataset": "ThingsEEG2FirstTrial",
-        "model": "EEGChannelNet",
+        "dataset": "EOODDatasetAllImagesBlockFactorized",
+        "model": "BiLSTM",
     },
     # Add more combinations as desired...
 ]
