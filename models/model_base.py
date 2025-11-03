@@ -117,7 +117,7 @@ class BaseModel(nn.Module):
         avg_loss = running_loss / n_batches
         return avg_loss, results
 
-    def evaluate_on_dataloader(self, dataloader, evaluator: Evaluator, compute_auc: bool = False):
+    def evaluate_on_dataloader(self, dataloader, evaluator: Evaluator, test_pred: bool = False):
         """
         Runs inference over the dataloader, collects predictions, labels, and scores 
         and uses the evaluator to compute and return metrics as a dict.
@@ -158,7 +158,7 @@ class BaseModel(nn.Module):
             y_true=all_labels,
             y_pred=all_preds,
             y_score=all_scores,
-            compute_auc=compute_auc
+            test_pred=test_pred
         )
 
         avg_loss = running_loss / n_batches

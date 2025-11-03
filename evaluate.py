@@ -214,7 +214,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
 
         # Final evaluation on test set
         with Timer() as t_test:
-            avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator, compute_auc=True)
+            avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator, test_pred=True)
         test_time = t_test.elapsed
 
         # Prepare test metrics as a wandb.Table
@@ -222,7 +222,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             columns=[
                 "model_name", "dataset_name", "split_type", "split_name",
                 "test_loss", "test_accuracy", "test_balanced_acc", "test_f1", "test_precision", "test_recall",
-                "test_cohen_kappa", "test_auc", "test_time_sec", "best_epoch"
+                "test_cohen_kappa", "test_confusion_matrix", "test_auc", "test_time_sec", "best_epoch"
             ],
             data=[[
                 model_conf['name'],
@@ -236,6 +236,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
                 test_metrics['precision'],
                 test_metrics['recall'],
                 test_metrics['cohen_kappa'],
+                test_metrics['confusion_matrix'],
                 test_metrics['auc'],
                 test_time,
                 best_epoch + 1,
@@ -256,7 +257,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             }
         }
         ckpt_path = os.path.join(run_dir, f'{split_name}.pt')
-        if not testing:
+        if not testing: # Change to always save if desired
             torch.save(checkpoint, ckpt_path)
 
         print(

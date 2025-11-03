@@ -6,7 +6,8 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     cohen_kappa_score,
-    roc_auc_score
+    roc_auc_score,
+    confusion_matrix
 )
 import numpy as np
 
@@ -22,13 +23,13 @@ class Evaluator:
         """
         self.average = average
 
-    def compute_metrics(self, y_true, y_pred, y_score=None, compute_auc=False):
+    def compute_metrics(self, y_true, y_pred, y_score=None, test_pred=False):
         """
         y_true: np.array [N]
         y_pred: np.array [N]
         y_score: np.array [N, num_classes] or None
         Returns a dict with:
-          - accuracy, balanced_acc, f1, precision, recall, cohen_kappa, auc (if compute_auc=True and y_score not None)
+          - accuracy, balanced_acc, f1, precision, recall, cohen_kappa, confusion matrix (if test_pred=True), auc (if test_pred=True and y_score not None)
         """
         results = {}
         results['accuracy'] = accuracy_score(y_true, y_pred)
@@ -38,8 +39,11 @@ class Evaluator:
         results['recall'] = recall_score(y_true, y_pred, average=self.average, zero_division=0)
         results['cohen_kappa'] = cohen_kappa_score(y_true, y_pred)
 
+        if test_pred:
+            results['confusion_matrix'] = confusion_matrix(y_true, y_pred)
+
         # AUC should only be computed once at end of epoch for test set as quite computationally expensive
-        if compute_auc and y_score is not None:
+        if test_pred and y_score is not None:
             # For multiclass AUC, use one-vs-rest (requires binary indicator matrix)
             try:
                 # Efficiently build binary indicator matrix
