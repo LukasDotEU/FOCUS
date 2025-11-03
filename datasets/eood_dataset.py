@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 import h5py
 import pandas as pd
 import torch
@@ -17,11 +18,11 @@ class EOODDataset(BaseEEGDataset):
         pre_load: bool = True,
         use_sequence: bool = False,
         sequence_ordinals: list[int] = [1, 2, 3, 4],
-        baseline_t: list[float] = [-0.2, 0.0],
+        baseline_t: Optional[list[float]] = [-0.2, 0.0],
         high_pass: float = 0.1,
         low_pass: float = 100.0,
         notch_freqs: list[float] = [50.0],
-        resample_freq: float = None,
+        resample_freq: Optional[float] = None,
         average_reference: bool = True,
         zscore_norm: bool = True,
     ):
@@ -44,7 +45,7 @@ class EOODDataset(BaseEEGDataset):
         super().__init__(eeg_root=eeg_root, images_root=images_root, sampling_rate=sampling_rate,
                          use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         # Build a base name using the preprocessing parameters:
-        t0, t1 = baseline_t
+        t0, t1 = baseline_t if baseline_t else (None, None)
         notch_str = "-".join(str(nf) for nf in notch_freqs)
         base_name = f"processed_epochs_baseline_{t0}_{t1}_hp{high_pass}_lp{low_pass}_notch{notch_str}"
         # append boolean flags so filename encodes preprocessing choices
