@@ -76,8 +76,9 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
     num_workers = 0 if pre_load else 4
 
     factorizeBlocks = dataset_conf.get('factorizeBlocks', True)
+    fraction = dataset_conf.get('fraction', None)
     # Build outer splits
-    splitter = SplitGenerator(full_dataset.metadata, factorizeBlocks)
+    splitter = SplitGenerator(full_dataset.metadata, factorizeBlocks, fraction)
     per_subj_splits = splitter.get_per_subject_splits()
     cross_subj_splits = splitter.get_cross_subject_splits()
     all_subj_cv_splits = splitter.get_stratified_kfold_splits(n_splits=10)
@@ -86,6 +87,8 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
     # Retrieve training parameters from model_conf
     epochs = model_conf['epochs']
     batch_size = model_conf['batch_size']
+    if not batch_size:
+        batch_size = dataset_conf['num_classes']
 
     # Loop through each outer split, carve out a single <train/val>, then do train and testing
     for split in all_outer_splits:
@@ -146,7 +149,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         }
         run_name = f"{dataset_conf['name']}_{model_conf['name']}_{split_name}"
         wandb.init(
-            project="FOCUS",  #FOCUS-EEGImageNet
+            project="FOCUS",
             name=run_name,
             config=wandb_config,
             mode="disabled" if testing else "online",
@@ -188,24 +191,19 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
                 f"val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})", flush=True
             )
 
-            wandb.log({
+            log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": avg_train_loss,
-                "train_accuracy": train_metrics['accuracy'],
-                "train_balanced_acc": train_metrics['balanced_acc'],
-                "train_f1": train_metrics['f1'],
-                "train_precision": train_metrics['precision'],
-                "train_recall": train_metrics['recall'],
-                "train_cohen_kappa": train_metrics['cohen_kappa'],
                 "train_time_sec": train_time,
                 "val_loss": avg_val_loss,
-                "val_accuracy": val_metrics['accuracy'],
-                "val_balanced_acc": val_metrics['balanced_acc'],
-                "val_f1": val_metrics['f1'],
-                "val_precision": val_metrics['precision'],
-                "val_recall": val_metrics['recall'],
-                "val_cohen_kappa": val_metrics['cohen_kappa'],
-            })
+            }
+
+            for k, v in train_metrics.items():
+                log_dict[f"train_{k}"] = v
+            for k, v in val_metrics.items():
+                log_dict[f"val_{k}"] = v
+
+            wandb.log(log_dict)
 
         # Reload best weights
         if best_state is not None:

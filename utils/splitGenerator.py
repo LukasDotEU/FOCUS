@@ -1,3 +1,4 @@
+from typing import Optional
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit, StratifiedGroupKFold
@@ -14,15 +15,17 @@ class SplitGenerator:
       carves out (train_inner_idx, val_idx) according to the same rules.
     """
 
-    def __init__(self, metadata: pd.DataFrame, factorizeBlocks: bool = True):
+    def __init__(self, metadata: pd.DataFrame, factorizeBlocks: bool = True, fraction: Optional[int] = None):
         """
         metadata: DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx'].
                   We assume the DataFrame's index matches the dataset's sample indices (0..N-1).
         factorizeBlocks: whether to factorize by (sequence_index) - useful when using multiple small blocks.
+        fraction: if given, only use this fraction of the data (for quick testing on EOOD).
         """
         self.meta = metadata
         self.subject_ids = sorted(self.meta['subject'].unique().tolist())
         self.N = len(self.meta)
+        self.fraction = fraction
 
         ## Necessary for k-fold CV
         # 1) factorize (image_idx, subject) into a single group_id
@@ -78,6 +81,10 @@ class SplitGenerator:
             train_idx = [idx for gid in train_gids for idx in self.group_to_samples[gid]]
             test_idx  = [idx for gid in test_gids  for idx in self.group_to_samples[gid]]
 
+            if "sequence_ordinal" in self.meta.columns and self.fraction is not None and self.fraction > 1:
+                seq1 = set(self.meta.loc[self.meta['sequence_ordinal'] == 1, 'idx'].tolist())
+                test_idx = [idx for idx in test_idx if idx in seq1]
+
             splits.append({'name': f'per_subject_{sid}', 'type': 'per_subject', 'train_idx': train_idx, 'test_idx': test_idx})
             print(f"per_subject_{sid}: {len(train_idx)} train / {len(test_idx)} test")
         return splits
@@ -93,6 +100,11 @@ class SplitGenerator:
         for sid in self.subject_ids:
             test_idx = self.meta[self.meta['subject'] == sid]['idx'].tolist()
             train_idx = list(all_indices.difference(test_idx))
+
+            if "sequence_ordinal" in self.meta.columns and self.fraction is not None and self.fraction > 1:
+                seq1 = set(self.meta.loc[self.meta['sequence_ordinal'] == 1, 'idx'].tolist())
+                test_idx = [idx for idx in test_idx if idx in seq1]
+
             splits.append({
                 'name': f'cross_subject_LOSO_{sid}',
                 'type': 'cross_subject',
@@ -120,6 +132,10 @@ class SplitGenerator:
             # 4) Expand back to full sample indices (all reps per group)
             train_idx = [idx for gid in train_gids for idx in self.group_to_samples[gid]]
             test_idx  = [idx for gid in test_gids  for idx in self.group_to_samples[gid]]
+
+            if "sequence_ordinal" in self.meta.columns and self.fraction is not None and self.fraction > 1:
+                seq1 = set(self.meta.loc[self.meta['sequence_ordinal'] == 1, 'idx'].tolist())
+                test_idx = [idx for idx in test_idx if idx in seq1]
 
             splits.append({
                 'name': f'all_subjects_CV_fold_{fold_id}',
@@ -181,6 +197,43 @@ class SplitGenerator:
         else:
             raise ValueError(f"Unknown split: {split_name}")
 
-        
+        if "sequence_ordinal" in self.meta.columns and self.fraction is not None and self.fraction > 1:
+            seq1 = set(self.meta.loc[self.meta['sequence_ordinal'] == 1, 'idx'].tolist())
+            val_idx = [idx for idx in val_idx if idx in seq1]
+
+            # Subsample train_inner to only keep 1/self.fraction of the data.
+            # Stratify by (subject, class_idx) and factorize groups by (subject, session_id, sequence_index)
+            if self.fraction is not None and self.fraction > 1 and len(train_inner) > 0:
+                keep_frac = 1.0 / float(self.fraction)
+
+                train_meta = self.meta.loc[train_inner].copy()
+
+                # factorization by (subject, session_id, sequence_index)
+                groups = list(zip(train_meta['subject'], train_meta['session_id'], train_meta['sequence_index']))
+                train_meta['subgroup_id'], _ = pd.factorize(groups)
+                subgroup_to_samples = train_meta.groupby('subgroup_id')['idx'].apply(list).to_dict()
+                rep_rows = train_meta.drop_duplicates(subset='subgroup_id').set_index('subgroup_id')
+
+                subgroup_ids = rep_rows.index.to_list()
+                # build stratification labels = subject*1000 + class_idx (consistent with other code)
+                strat_labels = (rep_rows['subject'].astype(int).to_numpy() * 1000
+                                + rep_rows['class_idx'].astype(int).to_numpy())
+
+                n_groups = len(subgroup_ids)
+                # decide how many groups to keep, at least 1
+                n_keep = max(1, int(round(n_groups * keep_frac)))
+
+                if n_keep < n_groups and n_groups >= 2:
+                    train_size = float(n_keep) / float(n_groups)
+                    sss2 = StratifiedShuffleSplit(n_splits=1, train_size=train_size, random_state=42)
+                    # StratifiedShuffleSplit expects an integer-range-like array for indices
+                    keep_pos, _ = next(sss2.split(np.arange(n_groups), strat_labels))
+                    kept_subgroup_ids = [subgroup_ids[i] for i in keep_pos]
+                    # expand kept groups back to sample indices
+                    train_inner = [idx for gid in kept_subgroup_ids for idx in subgroup_to_samples[gid]]
+                else:
+                    # either nothing to drop or too few groups for stratification -> keep as-is
+                    train_inner = train_inner
+                    print(f"[{split_name}] inner split: too few groups ({n_groups}) to subsample → keeping all {len(train_inner)} samples.")
         print(f"{split_name} inner: {len(train_inner)} train_inner / {len(val_idx)} val")
         return train_inner, val_idx
