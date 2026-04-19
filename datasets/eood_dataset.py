@@ -18,6 +18,7 @@ class EOODDataset(BaseEEGDataset):
         pre_load: bool = True,
         use_sequence: bool = False,
         sequence_ordinals: list[int] = [1, 2, 3, 4],
+        data_fraction: Optional[int] = None,
         baseline_t: Optional[list[float]] = [-0.2, 0.0],
         high_pass: float = 0.1,
         low_pass: float = 100.0,
@@ -83,7 +84,7 @@ class EOODDataset(BaseEEGDataset):
         # Filter metadata
         self.metadata = self.metadata[self.metadata["type"] == "standard"] # keep only standard trials and no jitter trials
 
-        # Filter metadata to only keep rows with sequence_ordinal equal to 4, if available
+        # Filter metadata to only keep rows with sequence_ordinal equal to X, if available
         if "sequence_ordinal" in self.metadata.columns:
             self.metadata = self.metadata[self.metadata["sequence_ordinal"].isin(sequence_ordinals)]
         
