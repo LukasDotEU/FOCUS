@@ -20,7 +20,7 @@ class SplitGenerator:
         metadata: DataFrame with columns ['idx', 'subject', 'class_idx', 'image_idx'].
                   We assume the DataFrame's index matches the dataset's sample indices (0..N-1).
         factorizeBlocks: whether to factorize by (sequence_index) - useful when using multiple small blocks.
-        fraction: if given, only use this fraction of the data (for quick testing on EOOD).
+        fraction: if given, only use this fraction of the data (for quick testing on EEG-CORD).
         """
         self.meta = metadata
         self.subject_ids = sorted(self.meta['subject'].unique().tolist())

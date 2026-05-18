@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-preprocess_EOOD.py
+preprocess_eegCORD.py
 
 This script preprocesses anonymized raw FIF files and their corresponding CSV files
 embedded in an HDF5 file (created by anonymize_and_package_dataset.py). It applies
@@ -11,7 +11,7 @@ along with metadata, into an output HDF5 file.
 
 Usage Example:
 --------------
-python preprocess_EOOD.py \
+python preprocess_eegCORD.py \
   --in_raw_dir ./anonymized_raws/ \
   --in_csv_h5 anonymized_and_csvs.h5 \
   --out_h5 processed_epochs_new.h5 \
@@ -522,12 +522,12 @@ if __name__ == "__main__":
         )
         parser.add_argument(
             "--in_raw_dir",
-            default="../Datasets/EOOD/raws/",
+            default="../Datasets/EEG-CORD/raws/",
             help="Directory with anonymized raw FIF files (expected naming: subject_{:02d}_session_{n}.fif)",
         )
         parser.add_argument(
             "--in_csv_h5",
-            default="../Datasets/EOOD/raws/sequences.h5",
+            default="../Datasets/EEG-CORD/raws/sequences.h5",
             help="HDF5 file created by anonymize script that contains CSVs under /csvs/subject_{:02d}/session_{}/csv",
         )
         parser.add_argument(

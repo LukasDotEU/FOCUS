@@ -6,7 +6,7 @@ import torch
 
 from datasets.base_dataset import BaseEEGDataset
 
-class EOODDataset(BaseEEGDataset):
+class EEGCORD(BaseEEGDataset):
     def __init__(
         self,
         eeg_root: str,
@@ -28,7 +28,7 @@ class EOODDataset(BaseEEGDataset):
         zscore_norm: bool = True,
     ):
         """
-        PyTorch Dataset for preprocessed EOOD epochs in an HDF5 file.
+        PyTorch Dataset for preprocessed EEG-CORD epochs in an HDF5 file.
         
         Expects an HDF5 file with one group per epoch.
         Each group should have:
@@ -36,7 +36,7 @@ class EOODDataset(BaseEEGDataset):
           - Attributes that include metadata.
         
         If the preprocessed file does not exist, the preprocessing script
-        (preprocess_EOOD.py) will be executed using the provided preprocessing parameters.
+        (preprocess_eegCORD.py) will be executed using the provided preprocessing parameters.
         The preprocessed file naming convention is:
           processed_epochs_baseline_<t0>_<t1>_hp<high_pass>_lp<low_pass>_notch<notch1>-<notch2>...[optional _seq].h5
           
@@ -61,8 +61,8 @@ class EOODDataset(BaseEEGDataset):
         if not os.path.exists(self.preproc_path):
             print(f"Preprocessed file not found at {self.preproc_path}. Running preprocessing...")
             # Assume the preprocessing script is accessible from the datasets module.
-            from datasets import preprocess_EOOD
-            exit_code = preprocess_EOOD.run_preprocessing(
+            from datasets import preprocess_eegCORD
+            exit_code = preprocess_eegCORD.run_preprocessing(
                 in_raw_dir=os.path.join(eeg_root,"raws"),
                 in_csv_h5=os.path.join(os.path.dirname(eeg_root), "raws", "sequences.h5"),
                 out_h5=self.preproc_path,
@@ -93,7 +93,7 @@ class EOODDataset(BaseEEGDataset):
         self.metadata["idx"] = self.metadata.index
 
         if self.use_cwt:
-            raise NotImplementedError("CWT not implemented for EOODDataset yet.")
+            raise NotImplementedError("CWT not implemented for EEG-CORD dataset yet.")
         
         if self.pre_load:
             # Preload EEG data for filtered epochs only.
@@ -147,16 +147,16 @@ class EOODDataset(BaseEEGDataset):
         if self.pre_load:
             data = self._data_cache[index]
             if self.use_cwt:
-                raise NotImplementedError("CWT not implemented for EOODDataset yet.")
+                raise NotImplementedError("CWT not implemented for EEG-CORD dataset yet.")
         else:
             data = self._load_epoch(row["epoch_idx"])
             if self.use_cwt:
-                raise NotImplementedError("CWT not implemented for EOODDataset yet.")
+                raise NotImplementedError("CWT not implemented for EEG-CORD dataset yet.")
             
         sample = {"eeg": torch.tensor(data)}
 
         if self.use_cwt:
-            raise NotImplementedError("CWT not implemented for EOODDataset yet.")
+            raise NotImplementedError("CWT not implemented for EEG-CORD dataset yet.")
             sample["cwt"] = torch.tensor(cwt_data)  # Placeholder; implement CWT loading if needed.
         
         if self.use_images:
