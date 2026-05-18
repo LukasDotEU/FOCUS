@@ -137,6 +137,28 @@ This script will:
 - Compute and log metrics using [`Evaluator`](utils/metrics.py) and time each phase with [`Timer`](utils/timers.py).
 - Log results through Wandb.
 
+## Model Implementation Differences
+
+Due to inconsistencies between code and paper descriptions, dataset-dependent input dimensions, and classifier output requirements, we made several adaptations to the original models.
+
+- **EEGNet**: We used the [original version](https://dx.doi.org/10.1088/1741-2552/aace8c), applying hyperparameters and MaxPooling (instead of AveragePooling) as in [Guenther et al. (2024)](https://www.nature.com/articles/s41598-024-66228-1). Other unclear modifications in that paper were omitted. The final linear layer projects to the number of classes.
+
+- **NiceEEG**: We corrected the image projection module, which previously returned the input unchanged instead of applying its layers. This fix led to improved performance in an earlier evaluation of ours, raising the 200-class zero-shot accuracy from 13.80% to 16.95% compared to the original paper.
+
+- **EEGChannelNet**: We employed three residual blocks for both the ThingsEEG2 and Kaneshiro datasets instead of the original four. For the Kaneshiro dataset, the temporal stride was adjusted from `(1, 2)` to `(1, 14)` to maintain a consistent feature size prior to the MLP. The final linear layer projects the features to the corresponding number of classes. The joint learning variant was not implemented due to missing source code. Because training proved unstable even on the filtered EEGImageNet dataset on which the model was originally developed, we reduced the learning rate from 1e-3 to 5e-4. A potential cause of the instability could be the use of different split types, as the original implementation employed a fixed across-all-subjects split.
+
+- **EEGClip**: We used precomputed image features to avoid redundant computation. For the classifier MLP, the hidden layer size was 128 for EEGImageNet, 64 for Kaneshiro, and two hidden layers with sizes 512 followed by 1024 for ThingsEEG2. Pretraining was run for 2048 epochs and fine-tuning for 250, following the original code.
+
+- **ATMS**: The codebase was difficult to navigate, with undocumented data embedding components not mentioned in the paper. While the paper mentions subject-specific tokens, the code uses additional subject-specific embedding layers as well as a shared token and embedding layer for unknown subjects. We trained the shared layer and token on a randomly selected 10% of the data (when trained using CV or LOSO splits) for the other 90% of the data the subject-specific layer and token were used. Furthermore, the batch size was not clearly specified in the [paper](https://proceedings.neurips.cc/paper_files/paper/2024/file/ba5f1233efa77787ff9ec015877dbd1f-Paper-Conference.pdf), where values of either 16 or 1024 could be inferred. Inspection of the released code indicated a batch size of 64, which we adopted.
+
+  **Note:** ATMS makes use of class labels. In the ThingsEEG2 dataset, there are instances such as `Bow1`, `Bow2`, and `Bow3`, each referring to different meanings of the word *bow* (hair bow, shooting bow, and present bow, respectively). Since there was no straightforward automatic fix, we retained the original class names as-is.
+
+- **CAWMASASTST**: Since no transformation code to the time-frequency domain was provided, we implemented it ourselves, assisted by a [forked repository](https://github.com/busiqiao/CAW-MASA-STST), which also fixed a bug in the model’s forward method. This fork served as the base for our implementation and training, including hyperparameters.
+
+- **BiLSTM**: Implemented as a bidirectional LSTM followed by a MLP. The MLP architecture mirrors that of EEGClip. Hyperparameters were adopted from [Zheng and Chen (2021)](https://www.sciencedirect.com/science/article/pii/S174680942030313X).
+
+- **CBraMod**: We used the pretrained model and weights provided. As it was not originally applied to our datasets, we adapted the classifier layer to fit the EEG input and the output dimensions. We selected the `all_patch_reps` classifier variant, as it appeared to be the one used in the original implementation, although the parameter count in the paper would suggest `avgpooling_patch_reps`. We did not modify the model’s architecture otherwise.
+
 ## Preprocessing
 
 Preprocessing for individual datasets is automatically being done when being run for the first time. 
