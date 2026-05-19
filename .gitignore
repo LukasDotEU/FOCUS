@@ -9,5 +9,9 @@ model_weights/
 wandb/
 slurm_outputs/
 results/
+old*/
+visualization/
+
+*results*/
 
 *.pth
