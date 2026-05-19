@@ -1,4 +1,5 @@
 from datasets.eegImageNet_dataset import EEGImageNet
+from datasets.eegCORD_dataset import EEGCORD
 from datasets.kaneshiro_dataset import Kaneshiro
 from datasets.thingsEEG2_dataset import ThingsEEG2
 from models.model_ATMS import ATMS
@@ -9,6 +10,7 @@ from models.model_EEGCLIP import EEGClip
 from models.model_EEGNet import EEGNet
 from models.model_EEGChannelNet import EEGChannelNet
 from models.model_NiceEEG import NiceEEG
+from models.model_TRIAGE_EEG import TRIAGE_EEG
 
 # All available dataset configurations.
 DATASET_CONFIGS = [
@@ -29,7 +31,7 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/EEGImageNet/OnlyUsedImageNet40Images/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [128]},
             "BiLSTM": {"hidden_channels": [128]},
@@ -52,8 +54,35 @@ DATASET_CONFIGS = [
             "NiceEEG": {
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy",
             },
+            "TRIAGE_EEG": {
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy",
+            },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [512, 1024]},  # TODO: Check if something else better
+            "BiLSTM": {"hidden_channels": [512, 1024]},
+        },
+    },
+    {
+        "name": "ThingsEEG2FirstTrial",
+        "class": ThingsEEG2,
+        "eeg_root": "../Datasets/Things-EEG2/Preprocessed_data_250Hz/",
+        "images_root": "../Datasets/Things-EEG2/Image_set/",
+        "sampling_rate": 250,
+        "time_steps": 250,
+        "num_electrodes": 63,
+        "num_classes": 1654,
+        "args": {
+            "average_reps": None,
+        },
+        "model_args": {
+            "EEGChannelNet": {"num_residual_blocks": 3},
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [512, 1024]},  # TODO: Check if something else better
             "BiLSTM": {"hidden_channels": [512, 1024]},
@@ -76,8 +105,11 @@ DATASET_CONFIGS = [
             "NiceEEG": {
                 "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy",
             },
+            "TRIAGE_EEG": {
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/NICE_clip_center_features.npy",
+            },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Things-EEG2/Image_set/image_set/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [512, 1024]},  # TODO: Check if something else better
             "BiLSTM": {"hidden_channels": [512, 1024]},
@@ -100,8 +132,11 @@ DATASET_CONFIGS = [
             "NiceEEG": {
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy",
             },
+            "TRIAGE_EEG": {
+                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy",
+            },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [64]},
             "BiLSTM": {"hidden_channels": [64]},
@@ -125,11 +160,328 @@ DATASET_CONFIGS = [
                 "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/NICE_clip_center_features.npy",
             },
             "ATMS": {
-                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_center_features.npy",
+                "clip_centers_file": "../Datasets/Kaneshiro/Kaneshiro_images/ATMS_clip_label_features.npy",
             },
             "EEGClip": {"hidden_channels": [64]},
             "BiLSTM": {"hidden_channels": [64]},
         },
+    },
+    {
+        "name": "EEGCORDDatasetAllImages",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1, 2, 3, 4],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+		"factorizeBlocks": False,
+    },
+    {
+        "name": "EEGCORDDatasetAllImagesBlockFactorized",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1, 2, 3, 4],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "TRIAGE_EEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+		"factorizeBlocks": True,
+    },
+    {
+        "name": "EEGCORDDatasetFirstImage",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+    },
+    {
+        "name": "EEGCORDDatasetSecondImage",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [2],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+    },
+    {
+        "name": "EEGCORDDatasetThirdImage",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [3],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+    },
+    {
+        "name": "EEGCORDDatasetLastImage",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [4],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+    },
+    {
+        "name": "EEGCORDDatasetFirstTwo",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1,2],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-both": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-CosineOnly": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-ClassificationOnly": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+		"factorizeBlocks": True,
+		"fraction": 2,
+    },
+    {
+        "name": "EEGCORDDatasetFirstThree",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1,2,3],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-both": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-CosineOnly": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-ClassificationOnly": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+		"factorizeBlocks": True,
+		"fraction": 3,
+    },
+    {
+        "name": "EEGCORDDatasetFirstFour",
+        "class": EEGCORD,
+        "eeg_root": "../Datasets/EEG-CORD/",
+        "images_root": "../Datasets/EEG-CORD/Images/",
+        "sampling_rate": 1000,
+        "time_steps": 1000,
+        "num_electrodes": 64,
+        "num_classes": 10,
+		"args": {
+            "sequence_ordinals": [1,2,3,4],
+            "baseline_t": [-0.2, 0.0],
+            "high_pass": 1.0,
+            "low_pass": 95.0,
+            "notch_freqs": [50.0],
+            "resample_freq": None,
+            "average_reference": True,
+            "zscore_norm": True,
+            "use_sequence": False,
+        },
+        "model_args": {
+            "NiceEEG": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-both": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-CosineOnly": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "LukasEEG-ClassificationOnly": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/NICE_clip_center_features.npy",
+            },
+            "ATMS": {
+                "clip_centers_file": "../Datasets/EEG-CORD/Images/ATMS_clip_label_features.npy",
+            },
+            "EEGClip": {"hidden_channels": [32]},
+            "BiLSTM": {"hidden_channels": [32]},
+        },
+		"factorizeBlocks": True,
+		"fraction": 4,
     },
     # Add more dataset configurations here...
 ]
@@ -186,7 +538,7 @@ MODEL_CONFIGS = [
         "epochs": 100,
         "batch_size": 16,
     },
-    # KaneshiroOriginal: NaN; Kaneshiro: 4640 -> 768; EEGImageNet: 2960 -> 768; ThingsEEG2: 1440 -> 768 (Original)
+    # KaneshiroOriginal: NaN; Kaneshiro: 3840? -> 768; EEGImageNet: 2960 -> 768; ThingsEEG2: 1440 -> 768 (Original)
     {
         "name": "NiceEEG",
         "class": NiceEEG,
@@ -208,7 +560,7 @@ MODEL_CONFIGS = [
             "images_individual_feature_file": "NICE_clip_individual_features.pth"
         },
         "epochs": 200,
-        "batch_size": 256,  # TODO:?
+        "batch_size": 1000,
     },
     {
         "name": "ATMS",
@@ -303,6 +655,32 @@ MODEL_CONFIGS = [
         "epochs": 50,
         "batch_size": 64,
     },
+	{
+        "name": "TRIAGE_EEG",
+        "class": TRIAGE_EEG,
+        "args": {
+            "img_embedding_dim": 768,
+            "proj_dim": 768,
+            "k": 40,
+            "target_tokens": 35,
+            "weight_decay": 1e-4,
+            "lr": 2e-4,
+            "b1": 0.5,
+            "b2": 0.999,
+            "batch_norm": True,
+            "clip_grad_norm": 1.0,
+            "cls_label_smoothing": 0.1,
+            "linear_bias": False
+        },
+        "pretraining": False,
+        "use_images": True,
+        "use_cwt": False,
+        "dataset_args": {
+            "images_individual_feature_file": "NICE_clip_individual_features.pth"
+        },
+        "epochs": 250,
+        "batch_size": None,
+    },
     # Add more model configurations here...
 ]
 
@@ -310,8 +688,8 @@ MODEL_CONFIGS = [
 # Use names that match entries in DATASET_CONFIGS and MODEL_CONFIGS.
 SELECTED_CONFIGS = [
     {
-        "dataset": "ThingsEEG2Averaged",
-        "model": "EEGClip",
+        "dataset": "ThingsEEG2FirstTrial",
+        "model": "EEGChannelNet",
     },
     # Add more combinations as desired...
 ]

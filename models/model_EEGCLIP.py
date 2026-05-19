@@ -26,7 +26,7 @@ class EEGClip(BaseModel):
         self.n_features = self.num_electrodes
         self.embedding_dim = self.num_electrodes * 2
         self.num_layers = num_layers
-        self.hidden_channels = hidden_channels
+        self.hidden_channels = list(hidden_channels) # deep copy
         self.hidden_channels.append(self.num_classes)
 
         self.eeg_encoder = EEG_Encoder(

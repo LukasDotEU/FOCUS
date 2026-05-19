@@ -1,24 +1,24 @@
-import argparse
 import os
+from typing import Optional
 import numpy as np
 import pandas as pd
 import torch
 import concurrent.futures
 
-import sys
-# ensure local package import works when running as script
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
 from datasets.base_dataset import BaseEEGDataset
+from feature_preprocessing import CAWMASASTST_eegcwt_preprocessing
 
-def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
+def preprocess(eeg_root: str, images_root: str, average_reps: Optional[bool] = False):
     """
     Reads preprocessed_eeg_training.npy from each subject sub-XX folder,
     splits into individual trial .pt files under:
       <eeg_root>/thingseeg2_individual_pt/
     Also saves metadata.csv, class_labels.pt, image_labels.pt.
     """
-    mode = 'averaged' if average_reps else 'multitrials'
+    if not average_reps is None:
+        mode = 'averaged' if average_reps else 'multitrials'
+    else:
+        mode = 'firsttrial'
     out_dir = os.path.join(eeg_root, f'thingseeg2_individual_pt_{mode}')
     os.makedirs(out_dir, exist_ok=True)
 
@@ -44,7 +44,23 @@ def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
         eeg_array = data['preprocessed_eeg_data']  # (n_images=16540, n_reps=4, n_chans=63, n_timesteps=250)
         n_images, n_reps, _, _ = eeg_array.shape
 
-        if average_reps:
+        if average_reps is None:
+            # use only first repetition
+            eeg_array = eeg_array[:, 0, :, :]  # shape [n_images, 63, 250]
+            for img_idx in range(n_images):
+                eeg = torch.from_numpy(eeg_array[img_idx]).float()
+                class_idx = img_idx // 10
+                fname = f"trial_{trial_idx:06d}.pt"
+                torch.save(eeg, os.path.join(out_dir, fname))
+                records.append({
+                    'idx': trial_idx,
+                    'filename': fname,
+                    'subject': subject,
+                    'class_idx': class_idx,
+                    'image_idx': img_idx
+                })
+                trial_idx += 1
+        elif average_reps:
             averaged = eeg_array.mean(axis=1)  # shape [n_images, 63, 250]
             for img_idx in range(n_images):
                 eeg = torch.from_numpy(averaged[img_idx]).float()
@@ -53,7 +69,7 @@ def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
                 torch.save(eeg, os.path.join(out_dir, fname))
                 records.append({
                     'idx': trial_idx,
-                    'filepath': fname,
+                    'filename': fname,
                     'subject': subject,
                     'class_idx': class_idx,
                     'image_idx': img_idx
@@ -68,7 +84,7 @@ def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
                     torch.save(eeg, os.path.join(out_dir, fname))
                     records.append({
                         'idx': trial_idx,
-                        'filepath': fname,
+                        'filename': fname,
                         'subject': subject,
                         'class_idx': class_idx,
                         'image_idx': img_idx
@@ -82,7 +98,7 @@ def preprocess(eeg_root: str, images_root: str, average_reps: bool = False):
     print(f"Saved {trial_idx} trials to {out_dir}")
 
 class ThingsEEG2(BaseEEGDataset):
-    def __init__(self, eeg_root: str, images_root: str, average_reps: bool = False,
+    def __init__(self, eeg_root: str, images_root: str, sampling_rate: float, average_reps: Optional[bool] = False,
                  use_images: bool = False, images_file: bool = None, use_cwt: bool = False, pre_load: bool = True):
         """
         Dataset for ThingsEEG2 trials saved via preprocess().
@@ -95,34 +111,66 @@ class ThingsEEG2(BaseEEGDataset):
           - trial_xxxxxx.pt files
         images_root/image_set/... for loading raw images if use_images.
         """
-        super().__init__(eeg_root=eeg_root, images_root=images_root, use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
+        super().__init__(eeg_root=eeg_root, images_root=images_root, sampling_rate=sampling_rate, use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         self.average_reps = average_reps  # If True, average the 4 repetitions of each image
         
-        mode = 'averaged' if self.average_reps else 'multitrials'
+        if not self.average_reps is None:
+            mode = 'averaged' if self.average_reps else 'multitrials'
+        else:
+            mode = 'firsttrial'
         self.samples_dir = os.path.join(self.eeg_root, f'thingseeg2_individual_pt_{mode}')
+        if not os.path.exists(self.samples_dir):
+            print(f"Preprocessing not done before. Preprocesing {mode} ThingsEEG2 into individual .pt files...")
+            preprocess(self.eeg_root, self.images_root, average_reps=self.average_reps)
+
         self.metadata = pd.read_csv(os.path.join(self.samples_dir, 'metadata.csv'))
         self.metadata = (self.metadata.sort_values('idx').set_index('idx', drop=False))  # Ensure sorted by idx
 
         self.class_labels = torch.load(os.path.join(self.samples_dir, 'class_labels.pt'))
         self.image_labels = torch.load(os.path.join(self.samples_dir, 'image_labels.pt'))
 
-        # Precompute ordered list of filepaths (and CWT names if needed)
-        self._filepaths = self.metadata['filepath'].tolist()
+        # depracation compliance when filename column was named filepath
+        if 'filepath' in self.metadata.columns:
+            self.metadata.rename(columns={'filepath': 'filename'}, inplace=True)
+        
+        self._filenames = self.metadata['filename'].tolist()
         if self.use_cwt:
-            self._cwt_paths = ["cwt_" + fp for fp in self._filepaths]
+            self._cwt_names = ["cwt_" + fp for fp in self._filenames]
+            if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
+                print("CWT files not found, computing CWT for all trials...")
+                CAWMASASTST_eegcwt_preprocessing.process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):
                 return torch.load(os.path.join(self.samples_dir, fname))
             # Pre-load all EEG data
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filepaths))
+                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filenames))
             if self.use_cwt:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    self.cwt_data = list(executor.map(load_pt, self._cwt_paths))
+                    self.cwt_data = list(executor.map(load_pt, self._cwt_names))
 
         if self.use_images:
-            self.images = torch.load(os.path.join(self.images_root, 'image_set', self.images_file), weights_only=False)
+            images_files_dir = os.path.join(self.images_root, 'image_set')
+            images_file_path = os.path.join(images_files_dir, self.images_file)
+            if not os.path.exists(images_file_path):
+                subfolders = sorted([entry.name for entry in os.scandir(images_files_dir) if entry.is_dir()])
+                train_concepts = np.load(os.path.join(self.images_root, 'image_metadata.npy'), 
+                                 allow_pickle=True).item()['train_img_concepts']
+                train_concepts = [concept.split('_', 1)[-1] for concept in train_concepts]
+                subfolders = [folder for folder in subfolders if folder in train_concepts]
+                
+                if self.images_file.startswith('ATMS'):
+                    from feature_preprocessing.ATMS_preprocessing import process_dataset
+                    process_dataset(images_files_dir, subfolders, class_text_labels=[s.replace("_", " ") for s in subfolders])
+                elif self.images_file.startswith('NICE'):
+                    from feature_preprocessing.NiceEEG_preprocessing import process_dataset
+                    process_dataset(images_files_dir, subfolders)
+                elif self.images_file.startswith('EEGClip'):
+                    from feature_preprocessing.EEGClip_preprocessing import process_dataset
+                    process_dataset(images_files_dir, subfolders)
+            
+            self.images = torch.load(images_file_path, weights_only=False)
 
     def __len__(self):
         return len(self.metadata)
@@ -146,9 +194,9 @@ class ThingsEEG2(BaseEEGDataset):
             if self.use_cwt:
                 cwt = self.cwt_data[idx]
         else:
-            eeg = torch.load(os.path.join(self.samples_dir, row['filepath']))
+            eeg = torch.load(os.path.join(self.samples_dir, row['filename']))
             if self.use_cwt:
-                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filepath']))
+                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filename']))
 
         sample = {
             'eeg': eeg,
@@ -167,12 +215,3 @@ class ThingsEEG2(BaseEEGDataset):
             feat = self.images[class_label][img_label]
             sample['image'] = torch.from_numpy(feat)
         return sample
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Preprocess ThingsEEG2 .npy to per-trial .pt')
-    parser.add_argument('eeg_root', nargs='?', default='../Datasets/Things-EEG2/Preprocessed_data_250Hz/', help='Root directory with sub-XX folders')
-    parser.add_argument('images_root', nargs='?', default='../Datasets/Things-EEG2/Image_set/', help='Root directory for image metadata and image_set/')
-    args = parser.parse_args()
-
-    preprocess(args.eeg_root, args.images_root, average_reps=True)
-    preprocess(args.eeg_root, args.images_root, average_reps=False)

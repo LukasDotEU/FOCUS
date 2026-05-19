@@ -1,24 +1,20 @@
 import os
-import argparse
 import scipy.io
 import torch
 import pandas as pd
 import concurrent.futures
 
-import sys
-# ensure local package import works when running as script
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
 from datasets.base_dataset import BaseEEGDataset
+from feature_preprocessing import CAWMASASTST_eegcwt_preprocessing
 
 # Mapping from class ID to human-readable class label
-CLASS_LABELS = {
-    1: 'Human Body',
-    2: 'Human Face',
-    3: 'Animal Body',
-    4: 'Animal Face',
-    5: 'Fruit Vegetable',
-    6: 'Inanimate Object'
+CLASS_TEXT_DICT = {
+    '1': 'Human Body',
+    '2': 'Human Face',
+    '3': 'Animal Body',
+    '4': 'Animal Face',
+    '5': 'Fruit Vegetable',
+    '6': 'Inanimate Object'
 }
 
 def preprocess(eeg_root: str, use_original: bool):
@@ -84,7 +80,7 @@ def preprocess(eeg_root: str, use_original: bool):
 
             records.append({
                 'idx': global_idx,
-                'filepath': fname,
+                'filename': fname,
                 'subject': subject,
                 'class_idx': class_idx,
                 'image_idx': image_idx
@@ -108,36 +104,60 @@ class Kaneshiro(BaseEEGDataset):
         use_images: if True, load image features from images_root/images_file.
         use_original: if True, loads from the 'original' folder; else 'updated'.
     """
-    def __init__(self, eeg_root: str, images_root: str, use_original: bool,
+    def __init__(self, eeg_root: str, images_root: str, sampling_rate: float, use_original: bool,
                  use_images: bool = False, images_file: str = None, use_cwt: bool = False, pre_load: bool = True):
-        super().__init__(eeg_root=eeg_root, images_root=images_root,
+        super().__init__(eeg_root=eeg_root, images_root=images_root, sampling_rate=sampling_rate,
                          use_images=use_images, images_file=images_file, use_cwt=use_cwt, pre_load=pre_load)
         self.use_original = use_original
 
         mode = 'original' if self.use_original else 'updated'
         samples_dir = os.path.join(self.eeg_root, f'kaneshiro{mode}_individual_pt')
+        if not os.path.exists(samples_dir):
+            print(f"Preprocessing not done before. Preprocesing {mode} data into individual .pt files...")
+            preprocess(self.eeg_root, use_original=self.use_original)
+
         meta_path = os.path.join(samples_dir, 'metadata.csv')
         self.metadata = pd.read_csv(meta_path)
         self.metadata = (self.metadata.sort_values('idx').set_index('idx', drop=False))  # Ensure sorted by idx
         self.samples_dir = samples_dir
 
-        # Precompute ordered list of filepaths (and CWT names if needed)
-        self._filepaths = self.metadata['filepath'].tolist()
+        # depracation compliance when filename column was named filepath
+        if 'filepath' in self.metadata.columns:
+            self.metadata.rename(columns={'filepath': 'filename'}, inplace=True)
+        
+        self._filenames = self.metadata['filename'].tolist()
         if self.use_cwt:
-            self._cwt_paths = ["cwt_" + fp for fp in self._filepaths]
+            self._cwt_names = ["cwt_" + fp for fp in self._filenames]
+            if not all(os.path.exists(os.path.join(self.samples_dir, fname)) for fname in self._cwt_names):
+                print("CWT files not found, computing CWT for all trials...")
+                CAWMASASTST_eegcwt_preprocessing.process_dataset(self.samples_dir, self.sampling_rate)
 
         if self.pre_load:
             def load_pt(fname):
                 return torch.load(os.path.join(self.samples_dir, fname))
             # Pre-load all EEG data
             with concurrent.futures.ThreadPoolExecutor() as executor:
-                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filepaths))
+                self.eeg_data = self.eeg_data = list(executor.map(load_pt, self._filenames))
             if self.use_cwt:
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    self.cwt_data = list(executor.map(load_pt, self._cwt_paths))
+                    self.cwt_data = list(executor.map(load_pt, self._cwt_names))
 
         if self.use_images:
-            self.images = torch.load(os.path.join(self.images_root, self.images_file), weights_only=False)
+            images_file_path = os.path.join(self.images_root, self.images_file)
+            if not os.path.exists(images_file_path):
+                subfolders = sorted([entry.name for entry in os.scandir(self.images_root) if entry.is_dir()])
+                if self.images_file.startswith('ATMS'):
+                    from feature_preprocessing.ATMS_preprocessing import process_dataset
+                    class_text_labels = [CLASS_TEXT_DICT[label] for label in subfolders]
+                    process_dataset(self.images_root, subfolders, class_text_labels)
+                elif self.images_file.startswith('NICE'):
+                    from feature_preprocessing.NiceEEG_preprocessing import process_dataset
+                    process_dataset(self.images_root, subfolders)
+                elif self.images_file.startswith('EEGClip'):
+                    from feature_preprocessing.EEGClip_preprocessing import process_dataset
+                    process_dataset(self.images_root, subfolders)
+            
+            self.images = torch.load(images_file_path, weights_only=False)
 
     def __len__(self):
         return len(self.metadata)
@@ -161,9 +181,9 @@ class Kaneshiro(BaseEEGDataset):
             if self.use_cwt:
                 cwt = self.cwt_data[idx]
         else:
-            eeg = torch.load(os.path.join(self.samples_dir, row['filepath']))
+            eeg = torch.load(os.path.join(self.samples_dir, row['filename']))
             if self.use_cwt:
-                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filepath']))
+                cwt = torch.load(os.path.join(self.samples_dir, "cwt_" + row['filename']))
         
         sample = {
             'eeg': eeg,
@@ -180,14 +200,3 @@ class Kaneshiro(BaseEEGDataset):
             sample['image'] = torch.from_numpy(feat)
         return sample
 
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Preprocess Kaneshiro .mat files and/or test dataset loader'
-    )
-    parser.add_argument('eeg_root', nargs='?', default='../Datasets/Kaneshiro/', help='Root directory for .mat data')
-    args = parser.parse_args()
-
-    # preprocess updated and original data
-    preprocess(args.eeg_root, use_original=False)
-    preprocess(args.eeg_root, use_original=True)

@@ -1,4 +1,4 @@
-name: eeg-object-eval
+name: FOCUS
 channels:
   - defaults
 dependencies:
@@ -22,6 +22,8 @@ dependencies:
       - open-clip-torch
       - PyWavelets
       - wandb
+      - h5py
+      - mne
 
       # for evaluation and visualization
       - matplotlib

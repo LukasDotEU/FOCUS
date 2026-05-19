@@ -1,3 +1,4 @@
+import copy
 import os
 import json
 import argparse
@@ -65,6 +66,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         'images_root': dataset_conf['images_root'],
         'use_images': model_conf['use_images'],
         'use_cwt': model_conf['use_cwt'],
+        'sampling_rate': dataset_conf['sampling_rate'],
         'images_file': images_file,
         **dataset_conf.get('args', {})
     }
@@ -73,8 +75,10 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
     full_dataset: BaseEEGDataset = DSClass(pre_load=pre_load, **ds_kwargs)
     num_workers = 0 if pre_load else 4
 
+    factorizeBlocks = dataset_conf.get('factorizeBlocks', True)
+    fraction = dataset_conf.get('fraction', None)
     # Build outer splits
-    splitter = SplitGenerator(full_dataset.metadata)
+    splitter = SplitGenerator(full_dataset.metadata, factorizeBlocks, fraction)
     per_subj_splits = splitter.get_per_subject_splits()
     cross_subj_splits = splitter.get_cross_subject_splits()
     all_subj_cv_splits = splitter.get_stratified_kfold_splits(n_splits=10)
@@ -83,6 +87,8 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
     # Retrieve training parameters from model_conf
     epochs = model_conf['epochs']
     batch_size = model_conf['batch_size']
+    if not batch_size:
+        batch_size = dataset_conf['num_classes']
 
     # Loop through each outer split, carve out a single <train/val>, then do train and testing
     for split in all_outer_splits:
@@ -107,7 +113,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
         # Instantiate model
         ModelClass = model_conf['class']
         model_name = model_conf['name']
-        model_args = model_conf['args'].copy()
+        model_args = copy.deepcopy(model_conf['args'])
 
         # Give ATMS model info about number of subjects it's being trained with for subject specific logic
         if model_name == "ATMS":
@@ -141,9 +147,10 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             "total_params": total_params,
             "trainable_params": trainable_params,
         }
+        run_name = f"{dataset_conf['name']}_{model_conf['name']}_{split_name}"
         wandb.init(
-            project="eeg-object-eval",  #eeg-object-eval-EEGImageNet
-            name=f"{dataset_conf['name']}_{model_conf['name']}_{split_name}",
+            project="FOCUS",
+            name=run_name,
             config=wandb_config,
             mode="disabled" if testing else "online",
         )
@@ -184,24 +191,19 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
                 f"val_F1={current_f1:.4f} (best={best_val_score:.4f} @ epoch {best_epoch+1})", flush=True
             )
 
-            wandb.log({
+            log_dict = {
                 "epoch": epoch + 1,
                 "train_loss": avg_train_loss,
-                "train_accuracy": train_metrics['accuracy'],
-                "train_balanced_acc": train_metrics['balanced_acc'],
-                "train_f1": train_metrics['f1'],
-                "train_precision": train_metrics['precision'],
-                "train_recall": train_metrics['recall'],
-                "train_cohen_kappa": train_metrics['cohen_kappa'],
                 "train_time_sec": train_time,
                 "val_loss": avg_val_loss,
-                "val_accuracy": val_metrics['accuracy'],
-                "val_balanced_acc": val_metrics['balanced_acc'],
-                "val_f1": val_metrics['f1'],
-                "val_precision": val_metrics['precision'],
-                "val_recall": val_metrics['recall'],
-                "val_cohen_kappa": val_metrics['cohen_kappa'],
-            })
+            }
+
+            for k, v in train_metrics.items():
+                log_dict[f"train_{k}"] = v
+            for k, v in val_metrics.items():
+                log_dict[f"val_{k}"] = v
+
+            wandb.log(log_dict)
 
         # Reload best weights
         if best_state is not None:
@@ -210,7 +212,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
 
         # Final evaluation on test set
         with Timer() as t_test:
-            avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator, compute_auc=True)
+            avg_test_loss, test_metrics = model.evaluate_on_dataloader(test_loader, evaluator, test_pred=True)
         test_time = t_test.elapsed
 
         # Prepare test metrics as a wandb.Table
@@ -218,7 +220,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             columns=[
                 "model_name", "dataset_name", "split_type", "split_name",
                 "test_loss", "test_accuracy", "test_balanced_acc", "test_f1", "test_precision", "test_recall",
-                "test_cohen_kappa", "test_auc", "test_time_sec", "best_epoch"
+                "test_cohen_kappa", "test_confusion_matrix", "test_auc", "test_time_sec", "best_epoch"
             ],
             data=[[
                 model_conf['name'],
@@ -232,6 +234,7 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
                 test_metrics['precision'],
                 test_metrics['recall'],
                 test_metrics['cohen_kappa'],
+                test_metrics['confusion_matrix'],
                 test_metrics['auc'],
                 test_time,
                 best_epoch + 1,
@@ -252,15 +255,15 @@ def train_and_evaluate(dataset_conf: dict, model_conf: dict, save_dir: str, test
             }
         }
         ckpt_path = os.path.join(run_dir, f'{split_name}.pt')
-        if not testing:
+        if not testing: # Change to always save if desired
             torch.save(checkpoint, ckpt_path)
 
         print(
             f"[{split_name}] Test results → "
-            f"Acc: {test_metrics['accuracy']:.4f}, F1: {test_metrics['f1']:.4f}, "
-            f"Precision: {test_metrics['precision']:.4f}, Recall: {test_metrics['recall']:.4f}, "
-            f"Kappa: {test_metrics['cohen_kappa']:.4f}, AUC: {test_metrics['auc']:.4f}, "
-            f"Time: {test_time:.4f}s", flush=True
+            f"Acc: {test_metrics['accuracy']:.4f}, Balanced Acc: {test_metrics['balanced_acc']:.4f}, "
+            f"F1: {test_metrics['f1']:.4f}, Precision: {test_metrics['precision']:.4f}, "
+            f"Recall: {test_metrics['recall']:.4f}, Kappa: {test_metrics['cohen_kappa']:.4f}, "
+            f"AUC: {test_metrics['auc']:.4f}, Time: {test_time:.4f}s", flush=True
         )
 
         # Clean up

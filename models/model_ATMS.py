@@ -330,7 +330,7 @@ class ATMS(BaseModel):
 
         load_dir = os.path.join(clip_centers_file)
         feature_center_names = np.load(load_dir, allow_pickle=True).item()
-        self.feature_centers = torch.from_numpy(feature_center_names['clip_center_features']).to(self.device)
+        self.feature_centers = torch.from_numpy(feature_center_names['clip_label_features']).to(self.device)
          
     def forward(self, batch):
         eeg = batch['eeg'] # [B, C, T]
@@ -343,12 +343,10 @@ class ATMS(BaseModel):
         return eeg_projection
     
     def compute_loss(self, batch, forward_out):
-        img_loss = self.loss_fn(forward_out, batch['image'], self.logit_scale)
-        # That was in original code but since alpha is 0.99, the text features barely have an influence.
-        # The usage of text features for training is also not mentioned in paper.
-        #text_loss = self.loss_func(eeg_projection, text_features, self.logit_scale)
-        #loss = img_loss*0.99 + text_loss*(1-0.99)
-        return img_loss
+        img_loss = self.loss_fn(forward_out, batch['image'][:,0,:], self.logit_scale)
+        text_loss = self.loss_fn(forward_out, batch['image'][:,1,:], self.logit_scale)
+        loss = img_loss*0.01 + text_loss*(1-0.01)
+        return loss
     
     def predict(self, batch):
         eeg_projection = self.forward(batch)

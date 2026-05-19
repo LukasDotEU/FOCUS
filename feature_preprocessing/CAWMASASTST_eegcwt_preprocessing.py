@@ -1,14 +1,10 @@
 import os
+import sys
 import torch
 import numpy as np
 from multiprocessing import set_start_method, Pool, cpu_count
 import pywt
 
-import sys
-# ensure local package import works when running as script
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-from config import DATASET_CONFIGS
 
 def make_cwt_scales(sampling_rate: float):
     """
@@ -81,60 +77,38 @@ def _process_trial(args):
         print(f"ERROR  {filename}: {e}")
         return trial_path, False
 
-def process_dataset(ds, overwrite):
-    root = ds['eeg_root']
-    name = ds['name']
-    sampling_rate = ds['sampling_rate']
-
+def process_dataset(root, sampling_rate, overwrite = True):
     scales, freqs = make_cwt_scales(sampling_rate)
-    print(f"Dataset {name!r}: sampling_rate={sampling_rate} Hz → {len(scales)} scales from {freqs.min():.1f}-{freqs.max():.1f} Hz")
+    print(f"CWT Preprocessing: sampling_rate={sampling_rate} Hz → {len(scales)} scales from {freqs.min():.1f}-{freqs.max():.1f} Hz")
 
-    # list all entries under root
-    for entry in os.listdir(root):
-        subdir = os.path.join(root, entry)
-        # only directories whose name starts with the dataset name
-        if not (os.path.isdir(subdir) and entry.startswith(name.lower())):
-            continue
+    # collect all .pt files in this folder
+    pt_files = [os.path.join(root, fn)
+                    for fn in os.listdir(root) if fn.endswith('.pt') and fn.startswith('trial')]
+    n = len(pt_files)
+    if n == 0:
+        return
+    print(f"  ↳ {n} trials, processing on {cpu_count()} cores…")
 
-        # collect all .pt files in this folder
-        pt_files = [os.path.join(subdir, fn)
-                    for fn in os.listdir(subdir) if fn.endswith('.pt') and fn.startswith('trial')]
-        n = len(pt_files)
-        if n == 0:
-            continue
-        print(f"  ↳ Folder '{entry}': {n} trials, processing on {cpu_count()} cores…")
+    # prepare args list for Pool
+    tasks = [(trial_path, scales, sampling_rate, overwrite) for trial_path in pt_files]
 
-        # prepare args list for Pool
-        tasks = [(trial_path, scales, sampling_rate, overwrite) for trial_path in pt_files]
+    # parallel map
+    processed = 0
+    skipped   = 0
 
-        # parallel map
-        processed = 0
-        skipped   = 0
-        try:
-            with Pool(processes=cpu_count()) as pool:
-                for i, (_, did) in enumerate(pool.imap_unordered(_process_trial, tasks), start=1):
-                    if did:
-                        processed += 1
-                    else:
-                        skipped += 1
-                    # simple 10%-step progress
-                    if i % max(1, n//10) == 0 or i == n:
-                        print(f"    {i}/{n} done (new: {processed}, skipped: {skipped})")
-        except KeyboardInterrupt:
-            print("Interrupted by user, terminating workers…", file=sys.stderr)
-            pool.terminate()
-            pool.join()
-            sys.exit(1)
-
-if __name__ == "__main__":
-    set_start_method('spawn', force=True)
-    overwrite = True
-
-    processed_roots = set()
-    for ds in DATASET_CONFIGS:
-        root = ds['eeg_root']
-        if root in processed_roots:
-            print(f"Skipping duplicate eeg_root: {root}")
-            continue
-        processed_roots.add(root)
-        process_dataset(ds, overwrite)
+    try:
+        set_start_method('spawn', force=True)
+        with Pool(processes=cpu_count()) as pool:
+            for i, (_, did) in enumerate(pool.imap_unordered(_process_trial, tasks), start=1):
+                if did:
+                    processed += 1
+                else:
+                    skipped += 1
+                # simple 10%-step progress
+                if i % max(1, n//10) == 0 or i == n:
+                    print(f"    {i}/{n} done (new: {processed}, skipped: {skipped})")
+    except KeyboardInterrupt:
+        print("Interrupted by user, terminating workers…", file=sys.stderr)
+        pool.terminate()
+        pool.join()
+        sys.exit(1)
